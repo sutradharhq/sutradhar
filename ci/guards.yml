@@ -1,0 +1,91 @@
+# Sutradhar CI template - wire the guards into GitHub Actions.
+# Copy into .github/workflows/, adjust paths, delete this banner.
+#
+# Principles encoded here:
+#   - lints run the guard's SELFCHECK first (a blind detector must fail CI,
+#     not pass it vacuously)
+#   - every step's exit code is the step's verdict; nothing pipes a test
+#     through anything that swallows $?
+#   - the e2e tier is real: it boots the stack and runs the behavioral
+#     suite, not a smoke ping
+
+name: guards
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-guards:
+    name: Python guards (lint ratchets + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Each lint runs its selfcheck internally before scanning; a detector
+      # that cannot flag its planted bad case exits nonzero here.
+      - name: Silent-swallow ratchet
+        run: python scripts/swallow_lint.py src/ --baseline scripts/swallow_baseline.json
+
+      - name: Query-interpolation guard
+        run: python scripts/interpolation_lint.py src/ --keywords sql
+
+      - name: Unit tests (including the ratchet tests)
+        run: |
+          pip install pytest
+          python -m pytest -q tests/
+
+  frontend-guards:
+    name: Frontend guards (types + behavioral suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      # The behavioral suite needs the app running. Adjust to your stack;
+      # the pattern that matters: wait for real health with a bounded loop,
+      # fail loudly on timeout, and let cypress's exit code be the verdict.
+      - name: Boot app
+        run: |
+          npm run build
+          npm run preview -- --port 4173 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:4173 >/dev/null 2>&1; then
+              echo "app ready after $((i))s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::app never became ready in 60s"; exit 1
+
+      - name: Route sweep + behavioral specs
+        run: npx cypress run --browser chrome
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-artifacts
+          path: |
+            cypress/screenshots
+            cypress/videos
+          retention-days: 7

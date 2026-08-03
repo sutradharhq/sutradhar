@@ -1,0 +1,68 @@
+# Operations playbook
+
+What code reading cannot find, and how to find it on purpose. The record
+this distills: the un-restorable backup, the root-owned data directory, the
+architecture-dependent build, and the half-dead-in-production fix were ALL
+invisible to review and each fell out of the first drill or runtime check
+that touched it.
+
+## Drills, on a schedule
+
+The four drills and their full protocol live in
+[agent/skills/ops-drill.md](../agent/skills/ops-drill.md). The short form:
+
+| Drill | Cadence | Non-negotiable |
+|---|---|---|
+| Cold-start install from docs alone | Before first deploy, then per release | Every stumble is a doc-fix commit the same day |
+| Backup restore + reconciliation | Monthly, and before any real data | Counts diffed against source; "backup exists" proves nothing |
+| Unattended soak | Before first unattended operation | Gaps in observation reported as gaps, never assumed continuous |
+| Upgrade in place | Per upgrade path you claim to support | On a stack carrying data, gates green after |
+
+## Exit-code discipline
+
+The cheapest rule with the highest save rate:
+
+- Never pipe a build or test through anything that swallows `$?`.
+  `make build | tail -20` reports the tail of a FAILED build with tail's
+  exit code. Capture `EXIT=$?` explicitly, print it, act on it.
+- A truncated run reports as truncated. Exit 137 is a killed process; a
+  killed test run shows its last green line and looks like a short pass.
+  Compare counts against the expected total every time.
+- Watch for flag interactions that eat your signal: a config-level `-q`
+  plus a command-line `-q` can suppress the very summary line you are
+  parsing.
+- Measure, never eyeball: row counts, exit codes, RSS, computed layout. If
+  the verification is "it looks fine", it is not verification.
+
+## Verify the null
+
+Before filing any finding, prove the test itself is valid:
+
+- `docker kill` suppresses `restart: always` by design; a "container did
+  not restart" finding from it is a bug in the drill, not the stack. Crash
+  PID 1 inside the container instead.
+- A test that fails for an environmental reason (missing mount, wrong env
+  var) produces findings about your harness, not the system. Prove
+  pre-existing vs regression by running the same check at the baseline
+  commit.
+- A false finding costs more trust than no finding, because the next real
+  one gets discounted.
+
+## Observability floor
+
+Before anything runs unattended, four surfaces have metrics: requests
+(count + latency by route template, not raw path - cardinality), jobs
+(fired, succeeded, failed), ingest/throughput chokepoints, and dependency
+up/down gauges. The gauge probes must not block the serving path.
+A metrics endpoint that cannot load its client library degrades to an
+honest comment block, never an empty 200 a scraper reads as "all zero".
+
+## Shared-host hygiene
+
+- Scrub selectively; never global-prune volumes on a machine that runs
+  anything else. Verify the neighbors survived.
+- Services with restart policies come back after a `stop` issued hours
+  ago. Re-check what is actually running before attributing resource
+  pressure.
+- Two test runs sharing one backend poison each other's verdicts. If a
+  failure looks impossible, check for a concurrent run before debugging.
