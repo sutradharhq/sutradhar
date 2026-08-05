@@ -1,0 +1,82 @@
+# Sutradhar's own CI - the repo held to its own doctrine.
+#
+# Every guard shipped here is exercised on every push: unit tests
+# (including the mutation/red cases and the selfcheck-wiring tests), each
+# lint's embedded selfcheck, the probe selftest (real core against real
+# bridge, failure paths included), and a syntax pass over the TS. A guards
+# repo whose guards are not in CI would be exactly the decoration it warns
+# about.
+
+name: selftest
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python guards (tests + selfchecks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests (incl. red cases + selfcheck wiring)
+        working-directory: python
+        run: |
+          pip install -q pytest
+          python -m pytest tests/ -q
+      - name: Lint selfchecks (planted bad cases must be caught)
+        run: |
+          python python/sutradhar_guards/swallow_lint.py --selfcheck
+          python python/sutradhar_guards/interpolation_lint.py --selfcheck
+      - name: Oldest supported Python still parses the toolkit
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: |
+          python3.9 -m compileall -q python/sutradhar_guards
+          python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
+          python3.9 python/sutradhar_guards/interpolation_lint.py --selfcheck
+
+  probe:
+    name: Probe selftest (real core vs real bridge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node js/probe/selftest.mjs
+
+  ts-syntax:
+    name: Cypress guards parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npx --yes esbuild js/cypress/uiGuards.ts --loader:.ts=ts --outfile=/dev/null
+          npx --yes esbuild js/cypress/routeSweep.example.cy.ts --loader:.ts=ts --outfile=/dev/null
+
+  bootstrap:
+    name: Bootstrap copies a working set
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir /tmp/target
+          bash bootstrap.sh /tmp/target
+          test -f /tmp/target/scripts/swallow_lint.py
+          test -f /tmp/target/cypress/support/uiGuards.ts
+          test -f /tmp/target/probe/server.mjs
+          python3 /tmp/target/scripts/swallow_lint.py --selfcheck

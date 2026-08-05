@@ -40,7 +40,7 @@ one of them leaks defects through the other two.
 
 | Loop | Question | Sutradhar gives you |
 |---|---|---|
-| **Inner** (while building) | Is what I just wrote actually working, right now? | Runtime-observation discipline: assert on network responses, store values, console, and DB rows, never pixels or vibes. [docs/frontend.md](docs/frontend.md), [docs/backend.md](docs/backend.md) |
+| **Inner** (while building) | Is what I just wrote actually working, right now? | **The runtime probe** ([js/probe/](js/probe/)): a zero-dependency bridge that lets any agent with `curl` assert on the running app's console, network, and live state (MCP adapter included) - plus the discipline docs. [docs/frontend.md](docs/frontend.md), [docs/backend.md](docs/backend.md) |
 | **Outer** (regression gate) | Does everything still work after every future change? | Behavioral UI guards (effect assertions, error-boundary and console sweeps, paint-defect detection), Python lint ratchets, class-invariant test helpers, CI templates. [js/](js/), [python/](python/), [ci/](ci/) |
 | **Meta** (the process) | Is the way we work producing correct software? | The doctrine: mutation-verified guards, ratchets over accumulation, honest degradation, operational drills, multi-agent rules. [DOCTRINE.md](DOCTRINE.md), [agent/](agent/) |
 
@@ -49,25 +49,40 @@ one of them leaks defects through the other two.
 ```
 sutradhar/
 ├── DOCTRINE.md              The full rule set, each rule with the failure that earned it
+├── CHANGELOG.md             Versioned releases (semver on the file contracts)
 ├── docs/
 │   ├── adoption.md          Rolling this onto a new or existing project
 │   ├── backend.md           Backend playbook: ratchets, honest degradation, scale discipline
 │   ├── frontend.md          The two-loop frontend playbook
+│   ├── ai-llm.md            Grounding, claim checking, evals, replay anchors
 │   ├── operations.md        Drills, exit-code discipline, verifying the null
-│   └── multi-agent.md       Running many agents/sessions on one codebase without carnage
+│   ├── multi-agent.md       Running many agents/sessions on one codebase without carnage
+│   └── templates/
+│       └── design-note.md   The prevention discipline as a fillable template
 ├── python/
 │   ├── sutradhar_guards/
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
 │   │   ├── ratchet.py             Library for writing shrink-only class-invariant tests
-│   │   └── envgate.py             Pytest env-gating that audits its own skip gates
-│   └── tests/                     The guards' own tests (mutation-verified, naturally)
+│   │   ├── envgate.py             Pytest env-gating that audits its own skip gates
+│   │   ├── claim_check.py         Ground every number in LLM-generated text
+│   │   ├── golden.py              Golden-dataset gate with reasoned re-baseline
+│   │   └── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
+│   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/
-│   └── cypress/
-│       ├── uiGuards.ts            Behavioral UI invariants: effect assertions, overprint detection
-│       └── routeSweep.example.cy.ts
+│   ├── cypress/
+│   │   ├── uiGuards.ts            Behavioral UI invariants: effect assertions, overprint detection
+│   │   └── routeSweep.example.cy.ts
+│   └── probe/
+│       ├── core.mjs               The probe logic (runs in browser AND in the selftest)
+│       ├── browser.mjs            Dev-only installer: console + fetch capture, state getters
+│       ├── server.mjs             Local bridge, zero deps, curl-able by any agent
+│       ├── mcp.mjs                Optional MCP stdio adapter (also zero deps)
+│       └── selftest.mjs           Real core vs real bridge, failure paths first-class
 ├── ci/
 │   └── guards.yml           GitHub Actions template wiring all guards into CI
+├── .github/workflows/
+│   └── selftest.yml         This repo's own CI - the guards guard themselves
 ├── agent/
 │   ├── AGENTS.md            Drop-in operating rules for any coding agent (CLAUDE.md compatible)
 │   └── skills/
@@ -75,6 +90,25 @@ sutradhar/
 │       └── ops-drill.md           Operate the system, don't read it
 └── bootstrap.sh             Copies the pieces into your repo
 ```
+
+## Who is this for
+
+Anyone building any application with (or without) coding agents. The
+layers have different reach, stated honestly:
+
+- **Stack-agnostic** (any language, any framework): the doctrine, the
+  five playbooks, the agent operating rules, the two skills, the design
+  templates, the CI shape. This is most of the value.
+- **Any Python codebase**: the guard toolkit (stdlib only, Python 3.9+,
+  framework-free). The ratchet PATTERN ports to any language in an
+  afternoon; the shipped detectors are Python.
+- **Any browser app**: the runtime probe (plain ESM, bundler-agnostic,
+  zero deps; the agent side is just curl).
+- **Cypress projects**: `uiGuards.ts` as shipped. The guards are small
+  and DOM-level, so porting to Playwright is mostly mechanical; the
+  route-sweep and effect-assertion patterns carry over unchanged.
+
+Nothing assumes our domain, our stack, or any particular agent product.
 
 ## Quickstart
 
@@ -154,6 +188,26 @@ tooling, CDP, Reticle itself). What Sutradhar adds is everything around it:
 the outer regression loop, the backend equivalents, the operational drills,
 the multi-agent workflow, and the doctrine that ties it together. The
 frontend playbook explains exactly where an inner-loop tool slots in.
+
+## Provenance of this repo's own claims
+
+Practicing what we preach (doctrine 5.1): the statistics quoted here
+("~37 ratchet tests produced two thirds of test-driven discoveries",
+"~1,400 point tests produced three", "five UI defects found by a human,
+zero by the suite") are **measured from one production build record** -
+ours: a production platform, 25+ robustness rounds, ~1,500
+tests, built largely by agents over hundreds of sessions. They are honest
+counts, not a controlled study, and one codebase is a sample size of one.
+The *scar stories* in DOCTRINE.md are real incidents, genericized only
+enough to remove domain detail. Treat the numbers as strong evidence from
+a single deployment, and expect your ratios to differ; the doctrine's own
+rule 8.1 says to keep only what your record confirms.
+
+## Versioning
+
+Semver on the file contracts (CLI flags, library APIs, baseline formats,
+probe endpoints), tagged releases, history in [CHANGELOG.md](CHANGELOG.md).
+Copy-in users upgrade by diffing against the tag they took.
 
 ## License
 

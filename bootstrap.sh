@@ -46,6 +46,17 @@ echo "ui guards:"
 copy "$HERE/js/cypress/uiGuards.ts"             "$TARGET/cypress/support/uiGuards.ts"
 copy "$HERE/js/cypress/routeSweep.example.cy.ts" "$TARGET/cypress/e2e/routeSweep.example.cy.ts"
 
+copy "$HERE/python/sutradhar_guards/claim_check.py"        "$TARGET/tests/sutradhar/claim_check.py"
+copy "$HERE/python/sutradhar_guards/golden.py"             "$TARGET/tests/sutradhar/golden.py"
+copy "$HERE/python/sutradhar_guards/detectors.py"          "$TARGET/tests/sutradhar/detectors.py"
+
+echo "runtime probe:"
+copy "$HERE/js/probe/core.mjs"    "$TARGET/probe/core.mjs"
+copy "$HERE/js/probe/browser.mjs" "$TARGET/probe/browser.mjs"
+copy "$HERE/js/probe/server.mjs"  "$TARGET/probe/server.mjs"
+copy "$HERE/js/probe/mcp.mjs"     "$TARGET/probe/mcp.mjs"
+copy "$HERE/js/probe/README.md"   "$TARGET/probe/README.md"
+
 echo "ci:"
 copy "$HERE/ci/guards.yml" "$TARGET/.github/workflows/guards.yml"
 

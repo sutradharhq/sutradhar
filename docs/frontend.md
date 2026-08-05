@@ -15,11 +15,13 @@ server. The discipline:
 
 - Verify against **network responses** (did the request fire, what came
   back), **store/state values** (did the selection persist), and the
-  **console** (did anything throw) - through runtime observation: browser
-  devtools protocol, MCP browser tooling, or a Reticle-class runtime
-  assertion tool. This is where a tool like
-  [Reticle](https://github.com/reticlehq/reticle) slots in, and any
-  equivalent works.
+  **console** (did anything throw) - through runtime observation.
+  Sutradhar ships its own tool for this: the
+  [runtime probe](../js/probe/README.md) - install it in the dev build,
+  and any agent with `curl` can read the live console, network log, and
+  exposed store state (an MCP adapter is included). Browser devtools
+  protocol tooling or [Reticle](https://github.com/reticlehq/reticle)
+  work here too; the discipline matters more than the tool.
 - A screenshot that "looks right" proves nothing in either direction: the
   data can be hardcoded, the control can be dead, the store can be stale.
   Pixels lie both ways.
