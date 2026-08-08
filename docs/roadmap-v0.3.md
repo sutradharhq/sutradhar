@@ -92,16 +92,29 @@ rule really wants - findings per engineer-hour, not per round). It needs an
 effort figure nobody currently records, and inventing one would be worse
 than the round count.
 
-## Planned, in priority order
-
 ### 4. `examples/` - a worked repo with planted defects
 
-A dev's first thirty minutes with Sutradhar is currently ~1,500 lines of
-prose. Ship a tiny app with six planted defects - a silent swallow, a
-control with no effect, an unbounded ORDER BY, a vacuous skip gate, a
-fabricated number in LLM output, an overprint - and a walkthrough where
-each guard goes red in front of you. Nothing converts a sceptic like
-watching the route sweep catch the planted crash on the first run.
+Seven planted defects in an app whose test suite is green, and a runner that
+surfaces all seven in ten seconds with no install.
+
+The design decision that makes it work: **the app's own tests pass.** An
+example where the tests fail teaches nothing - it just looks like a broken
+build. The whole point is the gap between a green suite and a correct
+system, so the suite has to be green.
+
+Two things excluded on purpose, with the reason stated in the example's own
+README rather than quietly: the frontend guards (Cypress, npm and a browser
+would turn a ten-second demo into a five-minute install) and the operational
+drills (they need a stack and a few hours, which is the honest limit of a
+shell-script demo, and rather the point of the ops-drill skill).
+
+The example is under guard itself - the runner exits nonzero on a missed
+defect and CI runs it - because a walkthrough that has silently stopped
+catching things fails in front of the person evaluating whether any of this
+works. Mutation-verified: fixing the swallow, making the decorative test
+real, or enforcing the orphan budget each turns it red at 6 of 7.
+
+## Planned, in priority order
 
 ### 5. Commit conformance - ratchet the workflow (AGENTS.md 8, 11, 12)
 
