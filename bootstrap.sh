@@ -41,6 +41,7 @@ copy "$HERE/python/sutradhar_guards/swallow_lint.py"       "$TARGET/scripts/swal
 copy "$HERE/python/sutradhar_guards/interpolation_lint.py" "$TARGET/scripts/interpolation_lint.py"
 copy "$HERE/python/sutradhar_guards/verify_guard.py"       "$TARGET/scripts/verify_guard.py"
 copy "$HERE/python/sutradhar_guards/budget.py"             "$TARGET/scripts/budget.py"
+copy "$HERE/python/sutradhar_guards/rounds.py"             "$TARGET/scripts/rounds.py"
 copy "$HERE/python/sutradhar_guards/ratchet.py"            "$TARGET/tests/sutradhar/ratchet.py"
 copy "$HERE/python/sutradhar_guards/envgate.py"            "$TARGET/tests/sutradhar/envgate.py"
 
@@ -82,6 +83,7 @@ echo
 echo "next steps:"
 echo "  1. record today's floor:   python scripts/swallow_lint.py <src>/ --update-baseline --baseline scripts/swallow_baseline.json"
 echo "  2. run the injection lint: python scripts/interpolation_lint.py <src>/ --keywords sql"
+echo "  2c. after each robustness round: python scripts/rounds.py docs/rounds/ --floors ."
 echo "  2a. gate your declared budgets: python scripts/budget.py docs/design/ --tests tests/"
 echo "  2b. prove your next fix's guard is real:"
 echo "      python scripts/verify_guard.py --guard-cmd \"pytest tests/test_the_fix.py\""
