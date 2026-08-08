@@ -21,6 +21,48 @@ fail before you trust it:
    Weaken the seam it protects, watch the behavioral cases go red, restore.
    If you cannot make it fail, you have written decoration.
 
+### Step 3 is a command, not a habit
+
+Every rule that lives only in prose gets skipped under deadline pressure,
+and this was the one with the worst consequences when skipped. Run it:
+
+```bash
+python scripts/verify_guard.py --guard-cmd "python -m pytest tests/test_tenant_scope.py"
+```
+
+It checks the fix commit out into a throwaway worktree, confirms the guard
+is green there, reverts **only** the production half of the commit (test
+files and prose are kept), and runs the guard again. The verdict is the
+exit code:
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| 0 | `VERIFIED` | red without the fix. The guard is real. |
+| 1 | `DECORATION` | green without the fix. It guards nothing - fix the guard, not the report. |
+| 2 | `INCONCLUSIVE` | premise broken, timeout, merge commit, no executable change. Never treat as a pass. |
+
+Three things worth knowing before you trust a verdict:
+
+- **`VERIFIED (weak)`** means the guard went red by failing to *load*
+  (import or collection error), not by asserting. Removing the fix breaks
+  the build, which is weaker evidence than an assertion that discriminates.
+  Worth a second look, especially when the fix added a whole module.
+- **`INCONCLUSIVE` on a green-looking run is the honest answer**, not a
+  nuisance. A guard already red at the fix commit tells you nothing about
+  the revert (doctrine 6.4), so the tool refuses rather than guessing.
+- **The classification is printed every run.** It splits the commit into
+  code (reverted), guards (kept), and inert prose/media. If it guesses
+  wrong, say so explicitly with `--code src/billing.py` or
+  `--guard-paths checks/`.
+
+For a suite that needs installed dependencies, symlink them into the
+worktree instead of reinstalling: `--link node_modules --link .venv`, or
+run an explicit `--setup-cmd "npm ci"`.
+
+The one half this does *not* mechanise is "weaken the seam and watch the
+behavioral cases go red". That is mutation testing and remains a manual
+exercise; the tool says so rather than implying full coverage of 2.2.
+
 Why the ratchet preference is that strong: on our build record, ~37 ratchet
 tests produced two thirds of all test-driven discoveries; ~1,400 point pins
 produced three. A ratchet keeps finding NEW defects as the code grows; a

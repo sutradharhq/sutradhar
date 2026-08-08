@@ -5,6 +5,38 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
+## Unreleased (v0.3.0)
+
+The theme: move rules out of memory and into mechanism. v0.2 made the
+guards guard themselves; v0.3 makes the doctrine guard itself. Every rule
+that lives only in prose is a rule that gets dropped under deadline
+pressure.
+
+Added:
+- **`verify_guard.py`**: doctrine 2.2 as a command. Checks the fix commit
+  out into a throwaway worktree, confirms the guard is green there, reverts
+  only the production half (tests and prose kept), and requires the guard
+  to go red. Tri-state exit code - 0 `VERIFIED`, 1 `DECORATION`, 2
+  `INCONCLUSIVE` - so "I could not tell" is never reported as a pass.
+  Stack-agnostic: the guard command is yours (`pytest`, `go test`, `npm
+  test`). Grades a red as weak when the guard failed to LOAD rather than
+  to assert; warns when `--guard-cmd` contains a pipe that would swallow
+  `$?` (doctrine 6.3); refuses merge commits and commits with no
+  executable change. Wired into `bootstrap.sh`, `ci/guards.yml`, and this
+  repo's own CI.
+
+Fixed (found by this release's own tests - recorded per doctrine 8.1):
+- verify-guard's first selfcheck run reported `DECORATION` for a docs-only
+  commit: prose was classified as production code, so reverting a README
+  and finding the guard still green read as a dead guard. A false
+  accusation is the worst failure mode for this tool - a net that cries
+  wolf gets muted. Fixed with a third file class (inert prose/media, with
+  `requirements*.txt` explicitly carved out as real code), and a commit
+  whose whole non-test half is inert now returns `INCONCLUSIVE`.
+- the guard-collision warning fired on bare substrings, so `golden.py`
+  was reported as possibly-the-guard for a command naming
+  `test_claim_check_golden.py`. Now matched on a token boundary.
+
 ## v0.2.0 - 2026-08-03
 
 The runtime probe, the numeric-truth toolkit, and the repo held to its own

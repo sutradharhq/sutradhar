@@ -1,0 +1,128 @@
+# v0.3 roadmap - move rules from memory to mechanism
+
+v0.1 wrote down what the build record taught us. v0.2 made the guards guard
+themselves. v0.3 has one theme:
+
+> **Every rule that lives only in prose is a rule that gets dropped under
+> deadline pressure. A rule that lives in a command survives.**
+
+The doctrine's own 8.1 says a rule enters with the incident that paid for
+it. The corollary this release acts on: a rule that cannot be checked
+mechanically will decay to ceremony no matter how well it is written, and
+the honest move is either to give it a mechanism or to mark it as
+judgement-only.
+
+Where the framework stood at v0.2, by rule:
+
+| Rule | Mechanised at v0.2? |
+|---|---|
+| 2.7 no silent swallows | yes - `swallow_lint.py` |
+| 2.8 no query interpolation | yes - `interpolation_lint.py` |
+| 2.1 guard in the same commit | partly - ratchet library, no gate |
+| 2.5 numeric truth | yes - `golden.py` |
+| 3.1 asserted effects | yes - `expectEffect` |
+| 3.2 route baseline | yes - route sweep |
+| 4.1 grounded numbers | yes - `claim_check.py` |
+| **2.2 guards shown to fail** | **no - honour system** |
+| **1.1 cardinalities and budgets** | **no - a fillable template** |
+| **8.1 / 8.3 evidence and stop rules** | **no - hand-counted, once** |
+
+The three in bold are the highest-consequence unmechanised rules in the
+framework, and 1.1 is the one the README already calls "the cheapest rule
+in the framework and the one whose absence cost us the most".
+
+## Shipped
+
+### 1. `verify_guard.py` - doctrine 2.2 becomes a command
+
+Reverts the production half of a fix commit in a throwaway worktree, keeps
+the tests, and requires the guard to go red. Tri-state exit code so
+"inconclusive" is never reported as a pass. See
+[backend.md](backend.md#step-3-is-a-command-not-a-habit).
+
+Chosen first because it is the largest consequence-to-effort ratio in the
+table: the tested-but-half-dead fix cost a week, and the experiment that
+would have caught it takes a worktree and two test runs.
+
+## Planned, in priority order
+
+### 2. The budget gate - compile design notes into tests (rule 1.1)
+
+`docs/templates/design-note.md` is prose nothing checks. Make the
+cardinality table machine-readable (YAML frontmatter), then ship:
+
+- a lint that fails when a new feature directory has no design note;
+- a generator that turns the declared envelope (`N=200_000`, `p95<800ms`,
+  `RSS<512MB`) into an enforcing test skeleton.
+
+The sentence that would have prevented the worst defect class becomes a
+test automatically. This is where the compounding is: written once,
+enforced forever.
+
+### 3. The flight recorder - measure the harness itself (rules 8.1, 8.3)
+
+The framework's whole credibility rests on one hand-counted statistic from
+one codebase. Nothing collects it, so no adopter can reproduce the
+measurement on their own repo. Ship a machine-readable round-record schema
+(the robustness loop refers to a "residual register" but ships no format)
+plus a tool tracking floors over time, findings per round, which guard
+fired, and marginal yield per round.
+
+Three payoffs: 8.1 becomes possible for adopters instead of aspirational,
+8.3's stop rule gets computed instead of felt, and every adopting repo
+starts generating evidence where today the sample size is one.
+
+### 4. `examples/` - a worked repo with planted defects
+
+A dev's first thirty minutes with Sutradhar is currently ~1,500 lines of
+prose. Ship a tiny app with six planted defects - a silent swallow, a
+control with no effect, an unbounded ORDER BY, a vacuous skip gate, a
+fabricated number in LLM output, an overprint - and a walkthrough where
+each guard goes red in front of you. Nothing converts a sceptic like
+watching the route sweep catch the planted crash on the first run.
+
+### 5. Commit conformance - ratchet the workflow (AGENTS.md 8, 11, 12)
+
+The agent operating rules are good and unenforced. A pre-push hook or CI
+job can mechanically check most of them: a fix-shaped commit with no test
+change, a commit sweeping unrelated paths, a closed tracker item with an
+untouched status doc. The ratchet philosophy applied to the process rather
+than the code. Agents drift; the guard against drift should not be the
+agent's own recall of a file it read a hundred thousand tokens ago.
+
+### 6. TS/JS ports of the ratchet and swallow detectors
+
+The README claims the ratchet pattern "ports to any language in an
+afternoon". Spend the afternoon. Most agent-built apps are TypeScript end
+to end, and empty `catch {}` is *the* idiomatic sin there - the shipped
+swallow lint cannot see it.
+
+### 7. The red-team diff review skill (rule 8.4)
+
+8.4 says outside minds find what self-discipline cannot, but both shipped
+skills are self-review by the same agent family that wrote the code. Add a
+third: an adversarial review of a *diff*, written to be handed to a fresh
+agent with no context, framed as "refute the claim that this diff is
+correct". It is the only rule in section 8 with no artifact behind it.
+
+## Deferred to v0.4, and why
+
+- **A backend runtime probe.** The inner loop is frontend-only today, which
+  is a real gap - the backend equivalent of "assert on live state" is
+  currently just "exercise the real seam". Deferred because the surface is
+  large (process attach, DB state, queue depth) and items 2-3 return more
+  per line.
+- **Playwright port of `uiGuards.ts`.** Mechanical, valuable, not urgent;
+  the patterns already carry over by hand.
+- **Mutation mode for `verify_guard`** (the "weaken the seam" half of 2.2).
+  Real mutation testing on the named code files, requiring the guard to
+  catch each mutant. Deferred deliberately: the revert half is the complete
+  high-value unit, and shipping it whole beats shipping both halves badly
+  (doctrine 8.3, the stop rule). The tool states this gap in its own
+  `--help` rather than implying full coverage of 2.2.
+
+## Subtractions (doctrine 8.2 applies to this repo too)
+
+- `bootstrap.sh` copies every layer unconditionally. A backend-only team
+  gets Cypress files it will never use, which reads as bloat and costs
+  trust. Add `--layers doctrine,python,probe`.

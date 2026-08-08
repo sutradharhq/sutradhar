@@ -44,7 +44,16 @@ Every rule below was earned by a real defect; the full stories are in
    exception, not the rule.
 9. **Mutation-verify the guard.** Revert the fix: the test must go red.
    If you cannot make the guard fail, the guard is decoration - fix the
-   guard, not the report.
+   guard, not the report. Do not do this by hand and do not claim it
+   without running it:
+
+   ```bash
+   python scripts/verify_guard.py --guard-cmd "<the command that runs your guard>"
+   ```
+
+   Exit 0 = the guard is real. Exit 1 = it passed without the fix and is
+   decoration. Exit 2 = inconclusive, which is never a pass. Paste the
+   verdict into the PR; "I verified it" is not evidence.
 10. **Test through the route, not just the helper.** A helper-level test
     structurally cannot see an import error in the handler that calls it.
 11. **Stage only named files. Never `git add -A`.** Check

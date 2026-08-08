@@ -42,7 +42,7 @@ one of them leaks defects through the other two.
 |---|---|---|
 | **Inner** (while building) | Is what I just wrote actually working, right now? | **The runtime probe** ([js/probe/](js/probe/)): a zero-dependency bridge that lets any agent with `curl` assert on the running app's console, network, and live state (MCP adapter included) - plus the discipline docs. [docs/frontend.md](docs/frontend.md), [docs/backend.md](docs/backend.md) |
 | **Outer** (regression gate) | Does everything still work after every future change? | Behavioral UI guards (effect assertions, error-boundary and console sweeps, paint-defect detection), Python lint ratchets, class-invariant test helpers, CI templates. [js/](js/), [python/](python/), [ci/](ci/) |
-| **Meta** (the process) | Is the way we work producing correct software? | The doctrine: mutation-verified guards, ratchets over accumulation, honest degradation, operational drills, multi-agent rules. [DOCTRINE.md](DOCTRINE.md), [agent/](agent/) |
+| **Meta** (the process) | Is the way we work producing correct software? | The doctrine, plus the tool that enforces its hardest rule: `verify_guard.py` reverts your fix and requires the guard to go red. [DOCTRINE.md](DOCTRINE.md), [agent/](agent/) |
 
 ## What is in the box
 
@@ -61,6 +61,7 @@ sutradhar/
 │       └── design-note.md   The prevention discipline as a fillable template
 ├── python/
 │   ├── sutradhar_guards/
+│   │   ├── verify_guard.py        Proves a guard can fail: reverts the fix, demands red
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
 │   │   ├── ratchet.py             Library for writing shrink-only class-invariant tests
@@ -102,6 +103,10 @@ layers have different reach, stated honestly:
 - **Any Python codebase**: the guard toolkit (stdlib only, Python 3.9+,
   framework-free). The ratchet PATTERN ports to any language in an
   afternoon; the shipped detectors are Python.
+- **Any git repository, any language**: `verify_guard.py`. It needs Python
+  to *run*, not to verify - the guard command is yours (`go test ./...`,
+  `npm test`, `cargo test`), so it works on any stack with commits and a
+  test command.
 - **Any browser app**: the runtime probe (plain ESM, bundler-agnostic,
   zero deps; the agent side is just curl).
 - **Cypress projects**: `uiGuards.ts` as shipped. The guards are small
@@ -157,6 +162,19 @@ fix precisely because its tests set internal state by hand instead of
 exercising the real seam. Every guard in this repo ships with a self-check
 that plants a known-bad case and requires the detector to catch it, so the
 guard cannot pass vacuously.
+
+That rule used to live on the honour system, which is the same as not
+having it. Now it is a command:
+
+```bash
+python scripts/verify_guard.py --guard-cmd "pytest tests/test_tenant_scope.py"
+```
+
+It reverts the production half of your fix commit in a throwaway worktree,
+keeps the tests, and reruns them. Exit 0 `VERIFIED`, exit 1 `DECORATION`,
+exit 2 `INCONCLUSIVE` - and inconclusive is never reported as a pass. The
+tool is held to its own rule: its selfcheck builds a real guard and a
+deliberately decorative one and fails unless it tells them apart.
 
 **Honest degradation.** A failure states itself. No silent fallbacks, no
 fabricated values, no `"ok"` wrapping an error, no empty list that reads as

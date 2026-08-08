@@ -40,6 +40,28 @@ jobs:
       - name: Query-interpolation guard
         run: python scripts/interpolation_lint.py src/ --keywords sql
 
+      # The verifier must be able to catch a decorative guard, or it is one.
+      - name: verify-guard selfcheck
+        run: python scripts/verify_guard.py --selfcheck
+
+      # Doctrine 2.2, enforced per PR rather than per honour system: for a
+      # commit that claims to fix something, revert its production half and
+      # require the named guard to go red. Set GUARD_CMD in the PR body, a
+      # commit trailer, or a label - whatever your team already uses; the
+      # step below reads a `Guard-cmd:` trailer and skips when absent.
+      #
+      # `|| exit $?` is deliberate: exit 1 (DECORATION) and exit 2
+      # (INCONCLUSIVE) are both failures, and neither may be swallowed.
+      - name: Guards shipped in this PR are real
+        run: |
+          set -euo pipefail
+          GUARD_CMD="$(git log -1 --format=%B | sed -n 's/^Guard-cmd: //p')"
+          if [ -z "$GUARD_CMD" ]; then
+            echo "no Guard-cmd trailer on HEAD; skipping (see docs/backend.md)"
+            exit 0
+          fi
+          python scripts/verify_guard.py --guard-cmd "$GUARD_CMD"
+
       - name: Unit tests (including the ratchet tests)
         run: |
           pip install pytest
