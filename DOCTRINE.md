@@ -55,7 +55,9 @@ the seam: behavioral cases must go red. A guard never shown to fail is
 decoration. *Scar: a tenant-isolation fix shipped tested-and-half-dead for a
 week because its tests set internal state by hand; the production path ran
 the guard in a thread whose context write was discarded, and no test noticed
-because no test went through the route.*
+because no test went through the route.* The revert half is mechanical -
+`verify_guard.py` runs it in a throwaway worktree and exits nonzero when the
+guard survives the revert; the weaken-the-seam half is still yours to run.
 
 **2.3 Test through the real seam** (the route, the transport, the public
 function), never by poking internals the production path does not use.

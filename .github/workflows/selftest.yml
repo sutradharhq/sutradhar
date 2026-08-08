@@ -34,6 +34,11 @@ jobs:
         run: |
           python python/sutradhar_guards/swallow_lint.py --selfcheck
           python python/sutradhar_guards/interpolation_lint.py --selfcheck
+      - name: verify-guard selfcheck (a decorative guard must be caught)
+        # Builds real repos with a real guard and a deliberately decorative
+        # one and requires the tool to tell them apart. A verifier that
+        # always answered VERIFIED would be the exact defect it hunts.
+        run: python python/sutradhar_guards/verify_guard.py --selfcheck
       - name: Oldest supported Python still parses the toolkit
         uses: actions/setup-python@v5
         with:
@@ -42,6 +47,7 @@ jobs:
           python3.9 -m compileall -q python/sutradhar_guards
           python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
           python3.9 python/sutradhar_guards/interpolation_lint.py --selfcheck
+          python3.9 python/sutradhar_guards/verify_guard.py --selfcheck
 
   probe:
     name: Probe selftest (real core vs real bridge)
@@ -79,4 +85,6 @@ jobs:
           test -f /tmp/target/scripts/swallow_lint.py
           test -f /tmp/target/cypress/support/uiGuards.ts
           test -f /tmp/target/probe/server.mjs
+          test -f /tmp/target/scripts/verify_guard.py
           python3 /tmp/target/scripts/swallow_lint.py --selfcheck
+          python3 /tmp/target/scripts/verify_guard.py --selfcheck

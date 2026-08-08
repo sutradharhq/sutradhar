@@ -3,6 +3,7 @@
 Copy-in, stdlib-only. See each module's docstring for the incident that
 earned it and the usage pattern.
 
+  verify_guard         prove a guard can fail: revert the fix, demand red (CLI + library)
   swallow_lint         silent-exception-swallow ratchet (CLI + library)
   interpolation_lint   query-string injection guard (CLI + library)
   ratchet              shrink-only allowlist library for class-invariant tests
@@ -12,9 +13,16 @@ earned it and the usage pattern.
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0.dev0"
 
 from .ratchet import Ratchet, RatchetError, selfcheck_detector  # noqa: F401
+from .verify_guard import (  # noqa: F401
+    DECORATION,
+    INCONCLUSIVE,
+    VERIFIED,
+    classify,
+    verify,
+)
 from .envgate import EnvGate, apply_env_gates, audit_skip_gates  # noqa: F401
 from .claim_check import extract_numbers, ground_claims  # noqa: F401
 from .golden import GoldenError, GoldenGate  # noqa: F401
