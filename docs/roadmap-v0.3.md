@@ -65,20 +65,34 @@ design intent and a single sample over it fails. Real percentiles need a
 `samples=N` runner, which is worth having and is not worth blocking the
 gate on.
 
+### 3. `rounds.py` - the flight recorder
+
+Doctrine 8.1 (which rules earn their keep) and 8.3 (when to stop) both ask
+questions that need a history nobody was keeping. This reads the round
+records the robustness-loop skill already asks for and computes: the stop
+rule, the residual register, and rule attribution.
+
+Two design decisions worth recording:
+
+**It refuses more than it reports.** The stop rule will not answer on fewer
+than two rounds; attribution will not name deletion candidates on fewer than
+five. A reporter that always produces a confident answer would be actively
+harmful here, because 8.1 would then delete rules on the strength of a quiet
+week. The refusals are the load-bearing behaviour and they are what the
+selfcheck guards hardest.
+
+**Findings are RECORDED, floors are MEASURED, and the report says so.** A
+logbook has a logbook's biases - a round that found nothing because nobody
+looked produces the same row as a round that found nothing because there was
+nothing to find. Baseline totals have no judgement in the loop. Presenting
+them as one number would be exactly the provenance failure 5.1 names.
+
+Deferred within this item: effort per round (the denominator the 8.3 stop
+rule really wants - findings per engineer-hour, not per round). It needs an
+effort figure nobody currently records, and inventing one would be worse
+than the round count.
+
 ## Planned, in priority order
-
-### 3. The flight recorder - measure the harness itself (rules 8.1, 8.3)
-
-The framework's whole credibility rests on one hand-counted statistic from
-one codebase. Nothing collects it, so no adopter can reproduce the
-measurement on their own repo. Ship a machine-readable round-record schema
-(the robustness loop refers to a "residual register" but ships no format)
-plus a tool tracking floors over time, findings per round, which guard
-fired, and marginal yield per round.
-
-Three payoffs: 8.1 becomes possible for adopters instead of aspirational,
-8.3's stop rule gets computed instead of felt, and every adopting repo
-starts generating evidence where today the sample size is one.
 
 ### 4. `examples/` - a worked repo with planted defects
 

@@ -59,12 +59,15 @@ sutradhar/
 │   ├── roadmap-v0.3.md      What is shipping in v0.3, and what was deferred
 │   ├── design/
 │   │   └── lint-scan.md     This repo's own budget - a filled-in design note
+│   ├── rounds/
+│   │   └── round-001.md     This repo's own round record - real findings, not a sample
 │   ├── multi-agent.md       Running many agents/sessions on one codebase without carnage
 │   └── templates/
 │       └── design-note.md   The prevention discipline as a fillable template
 ├── python/
 │   ├── sutradhar_guards/
 │   │   ├── budget.py              Design-time cardinalities that tests must enforce
+│   │   ├── rounds.py              Flight recorder: stop rule, residual register, attribution
 │   │   ├── verify_guard.py        Proves a guard can fail: reverts the fix, demands red
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
@@ -190,6 +193,23 @@ that works. `expectEffect` snapshots the observable world (URL, DOM text,
 persisted state), runs the interaction, and fails if nothing moved. The
 control-that-does-nothing class ships constantly under suites that only
 assert rendering.
+
+**Measure the loop, not just the code.** Two rules in the doctrine ask
+questions nobody could answer: which rules can cite a save (8.1), and when
+to stop hardening (8.3). *It took us 24 rounds to ask the second one.* The
+flight recorder reads your round records and computes both:
+
+```bash
+python scripts/rounds.py docs/rounds/ --floors .
+```
+
+It answers CONTINUE / REST / INSUFFICIENT on the stop rule, derives the
+residual register from what is still deferred, and names the rules that have
+never caught anything - but **refuses** to name deletion candidates on fewer
+than five rounds, because 8.1 asks for months of silence and not a quiet
+week. Findings are labelled RECORDED (a logbook, with a logbook's biases)
+and floors are labelled MEASURED (sampled from the baselines, no judgement
+in the loop); the report never presents one as the other.
 
 **Drills outrank review.** Cold-start from the docs alone, restore a backup
 and reconcile the counts, soak unattended, upgrade in place. Every one of

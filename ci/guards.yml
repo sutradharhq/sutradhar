@@ -46,6 +46,11 @@ jobs:
       - name: Declared budgets are enforced
         run: python scripts/budget.py docs/design/ --tests tests/
 
+      # The round records feed doctrine 8.1 and 8.3. Validate them; a
+      # mistyped rule id loses an attribution nobody will miss.
+      - name: Round records are valid
+        run: python scripts/rounds.py docs/rounds/ --check
+
       # The verifier must be able to catch a decorative guard, or it is one.
       - name: verify-guard selfcheck
         run: python scripts/verify_guard.py --selfcheck

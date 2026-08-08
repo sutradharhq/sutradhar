@@ -106,14 +106,51 @@ rested lens regrows findings). The proven set:
 
 ## Phase 6: record, commit, close
 
-1. Update the residual register: strike what closed, add new deferrals with
-   reasons. The register only shrinks or gets more honest.
-2. Write the round record: FIXED list, DEFERRED list, corrected premises
-   (they matter more than the fixes), harness gotchas.
-3. Commit messages carry the why and the evidence, one logical change per
+1. Write the round record to `docs/rounds/round-NNN.md`. Prose first - the
+   record is a document people read - with one machine-readable table so the
+   flight recorder can compute the stop rule, the residual register, and
+   which doctrine rules earned their keep:
+
+   ```markdown
+   # Round 7 - 2026-08-08
+
+   Lenses: authz, numeric, scale
+
+   | id | severity | rule | found-by | status | summary |
+   |---|---|---|---|---|---|
+   | R7-1 | high | 2.7 | swallow-lint | fixed | metering read swallowed to {} |
+   | R7-2 | med  | 2.6 | scale lens   | deferred | sweep uncapped above 50k |
+   | R6-3 | med  | 3.1 | -            | closed | picker effect asserted |
+   ```
+
+   `severity` is high/med/low, `status` is fixed/deferred/closed, `rule` is
+   a doctrine id or `-`. **Fill the `rule` column**: it is the only record of
+   which rule caught what, and doctrine 8.1 cannot prune the doctrine
+   without it. A round that found nothing still writes the table with no
+   rows - that is what distinguishes "we looked and found nothing" from
+   "nobody wrote it down".
+
+2. The residual register is now derived, not maintained by hand: a deferred
+   finding stays open until a later round lists the same id as closed or
+   fixed. Strike nothing manually; close it in the next record.
+3. Then the prose the record has always carried: corrected premises (they
+   matter more than the fixes), and harness gotchas.
+4. Run the recorder and read what it says before deciding to run another
+   round:
+
+   ```bash
+   python scripts/rounds.py docs/rounds/ --floors .
+   ```
+5. Commit messages carry the why and the evidence, one logical change per
    commit.
 
 ## Exit criteria
 
 The loop rests when two consecutive full rounds surface zero HIGH findings.
 Then it runs on a longer cadence, because converged areas regrow.
+
+That criterion is now computed rather than remembered: `rounds.py` reads the
+round records and answers CONTINUE, REST, or INSUFFICIENT. Ask it every
+round. *The scar behind doctrine 8.3 is that it took 24 rounds before anyone
+asked whether the next one was worth running; the tool asks for you, and it
+refuses to answer at all on fewer than two rounds rather than guessing.*

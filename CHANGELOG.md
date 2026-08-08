@@ -37,7 +37,24 @@ Added:
   ceiling stays visible in the diff. The repo now carries its own budget
   (`docs/design/lint-scan.md`) enforced in its own CI.
 
+- **`rounds.py`** (the flight recorder): makes doctrine 8.1 and 8.3
+  computable instead of felt. Reads the round records the robustness-loop
+  skill already asks for - prose plus one machine-readable findings table -
+  and answers three questions nothing could answer before: the stop rule
+  (CONTINUE / REST / INSUFFICIENT, using the loop's own exit criterion of
+  two consecutive zero-HIGH rounds), the residual register (derived from
+  open deferrals rather than maintained by hand), and rule attribution
+  (which doctrine rules can cite a save). It **refuses** to name deletion
+  candidates on fewer than five rounds - 8.1 asks for months of silence,
+  not a quiet week - and labels findings RECORDED versus floors MEASURED so
+  a logbook is never presented as telemetry (doctrine 5.1). `--check` is
+  the gate half: a mistyped rule id silently loses an attribution, so CI
+  fails on one. The skill now ships the format it had always asked for.
+
 Fixed (found by this release's own tests - recorded per doctrine 8.1):
+- the flight recorder's round-heading regex lacked `re.MULTILINE`, so
+  `.search()` over a whole document never matched and NO round record was
+  ever parsed. Its own selfcheck caught it on the first run.
 - the budget gate's parser strictness had no selfcheck behind it: mutation
   testing showed that blinding the parser's refusal branch passed every
   other planted case, so a malformed design note would have been read as
@@ -93,7 +110,24 @@ Added:
   prevention discipline as a fillable template).
 - Provenance statement in the README for the repo's own claims.
 
+- **`rounds.py`** (the flight recorder): makes doctrine 8.1 and 8.3
+  computable instead of felt. Reads the round records the robustness-loop
+  skill already asks for - prose plus one machine-readable findings table -
+  and answers three questions nothing could answer before: the stop rule
+  (CONTINUE / REST / INSUFFICIENT, using the loop's own exit criterion of
+  two consecutive zero-HIGH rounds), the residual register (derived from
+  open deferrals rather than maintained by hand), and rule attribution
+  (which doctrine rules can cite a save). It **refuses** to name deletion
+  candidates on fewer than five rounds - 8.1 asks for months of silence,
+  not a quiet week - and labels findings RECORDED versus floors MEASURED so
+  a logbook is never presented as telemetry (doctrine 5.1). `--check` is
+  the gate half: a mistyped rule id silently loses an attribution, so CI
+  fails on one. The skill now ships the format it had always asked for.
+
 Fixed (found by this release's own tests - recorded per doctrine 8.1):
+- the flight recorder's round-heading regex lacked `re.MULTILINE`, so
+  `.search()` over a whole document never matched and NO round record was
+  ever parsed. Its own selfcheck caught it on the first run.
 - probe bridge reported `connected: null` instead of `false` before any
   probe ever connected;
 - claim-check number regex split "2026" into "202" + "6" (grouping

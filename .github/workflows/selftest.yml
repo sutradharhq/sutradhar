@@ -39,6 +39,10 @@ jobs:
         # unenforced budget must be caught) and the real check that
         # every number in docs/design/ has a test behind it.
         run: python python/sutradhar_guards/budget.py docs/design/ --tests python/tests/
+      - name: Round records are valid (rule ids resolve)
+        # A mistyped rule id silently loses the attribution 8.1
+        # depends on, and nothing else would ever notice.
+        run: python python/sutradhar_guards/rounds.py docs/rounds/ --check
       - name: verify-guard selfcheck (a decorative guard must be caught)
         # Builds real repos with a real guard and a deliberately decorative
         # one and requires the tool to tell them apart. A verifier that
@@ -54,6 +58,7 @@ jobs:
           python3.9 python/sutradhar_guards/interpolation_lint.py --selfcheck
           python3.9 python/sutradhar_guards/verify_guard.py --selfcheck
           python3.9 python/sutradhar_guards/budget.py --selfcheck
+          python3.9 python/sutradhar_guards/rounds.py --selfcheck
 
   probe:
     name: Probe selftest (real core vs real bridge)
@@ -93,6 +98,8 @@ jobs:
           test -f /tmp/target/probe/server.mjs
           test -f /tmp/target/scripts/verify_guard.py
           test -f /tmp/target/scripts/budget.py
+          test -f /tmp/target/scripts/rounds.py
           python3 /tmp/target/scripts/swallow_lint.py --selfcheck
           python3 /tmp/target/scripts/verify_guard.py --selfcheck
           python3 /tmp/target/scripts/budget.py --selfcheck
+          python3 /tmp/target/scripts/rounds.py --selfcheck
