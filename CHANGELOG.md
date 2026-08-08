@@ -5,12 +5,19 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
-## Unreleased (v0.3.0)
+## v0.3.0 - 2026-08-08
 
 The theme: move rules out of memory and into mechanism. v0.2 made the
 guards guard themselves; v0.3 makes the doctrine guard itself. Every rule
 that lives only in prose is a rule that gets dropped under deadline
 pressure.
+
+Four of seven planned items shipped. The release closes there deliberately,
+on doctrine 8.3: the marginal value of another tool fell below the value of
+one outside reader, and everything here has been validated against a single
+codebase by a single reviewer. See docs/rounds/round-002.md for the stop
+decision, including where the flight recorder disagrees and why that is not
+a contradiction.
 
 Added:
 - **`verify_guard.py`**: doctrine 2.2 as a command. Checks the fix commit
