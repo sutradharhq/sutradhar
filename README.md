@@ -113,7 +113,7 @@ Nothing assumes our domain, our stack, or any particular agent product.
 ## Quickstart
 
 ```bash
-git clone https://github.com/varunmundra5-stack/sutradhar.git
+git clone https://github.com/sutradharhq/sutradhar.git
 cd your-project
 bash ../sutradhar/bootstrap.sh .
 ```
