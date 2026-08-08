@@ -15,7 +15,7 @@ earned it and the usage pattern.
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
 """
 
-__version__ = "0.3.0.dev0"
+__version__ = "0.3.0"
 
 from .ratchet import Ratchet, RatchetError, selfcheck_detector  # noqa: F401
 # NOTE: the `budget` CONTEXT MANAGER is deliberately not re-exported here.

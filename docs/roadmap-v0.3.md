@@ -114,7 +114,35 @@ catching things fails in front of the person evaluating whether any of this
 works. Mutation-verified: fixing the swallow, making the decorative test
 real, or enforcing the orphan budget each turns it red at 6 of 7.
 
-## Planned, in priority order
+## Not built, and that is the release decision
+
+v0.3 ships four of the seven items below. Items 5-7 were not dropped for
+lack of time; they were declined on doctrine 8.3, and the reasoning is
+recorded here so the next session does not re-derive it.
+
+**The marginal tool is now worth less than the first outside reader.** Every
+claim in this repo has been validated against one codebase by one reviewer.
+Doctrine 8.5 says the unvalidated loop is production until real operations
+push back; four working tools and a ten-second demo is enough surface for
+that push-back to arrive, and more surface would only mean more to unbuild
+when it does.
+
+**Each remaining item is also weaker than it looks:**
+
+- **Item 5** gates on commit *shape*, which is precisely the kind of check
+  that cries wolf - and a muted net is worse than none. It wants real
+  commit histories to tune against, which is to say it wants users.
+- **Item 6** would genuinely double the addressable audience, and it is the
+  one item that should be built the moment somebody asks for it. Building
+  it first is guessing at demand that one conversation would settle.
+- **Item 7** is a prompt file: cheap, but it proves nothing until an outside
+  reader has actually used it, at which point they can tell us what it
+  should say.
+
+The stop rule that would justify restarting: evidence from a repo that is
+not this one. Not the backlog still having entries.
+
+## Planned, if the evidence arrives
 
 ### 5. Commit conformance - ratchet the workflow (AGENTS.md 8, 11, 12)
 
