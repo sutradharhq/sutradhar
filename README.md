@@ -11,6 +11,19 @@ It is a complete harness: backend, frontend, operations, and the agent
 workflow itself. Every rule in it was paid for by a real defect on a real
 production-bound codebase. None of it is aspiration.
 
+## See it catch something first
+
+```bash
+git clone https://github.com/sutradharhq/sutradhar.git
+cd sutradhar && bash examples/run-the-guards.sh
+```
+
+Ten seconds, no install. A small app whose test suite is green, and seven
+real defects surfacing out of it: an outage swallowed into an empty dict, a
+model inventing the numbers in a customer summary, a billing test that has
+never run in any environment, a test that cannot fail. Then read on for why
+each one is in there.
+
 ## Why this exists
 
 We built a data-heavy platform with AI agents over hundreds of sessions:
@@ -91,6 +104,9 @@ sutradhar/
 │   └── guards.yml           GitHub Actions template wiring all guards into CI
 ├── .github/workflows/
 │   └── selftest.yml         This repo's own CI - the guards guard themselves
+├── examples/
+│   ├── run-the-guards.sh    Ten seconds: seven planted defects, one green test suite
+│   └── broken-app/          The app they live in, tests and all
 ├── agent/
 │   ├── AGENTS.md            Drop-in operating rules for any coding agent (CLAUDE.md compatible)
 │   └── skills/

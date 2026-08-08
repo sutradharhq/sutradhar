@@ -60,6 +60,21 @@ jobs:
           python3.9 python/sutradhar_guards/budget.py --selfcheck
           python3.9 python/sutradhar_guards/rounds.py --selfcheck
 
+  examples:
+    name: The worked example still catches its planted defects
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # A walkthrough that has stopped demonstrating fails in the most
+      # damaging place there is: in front of someone evaluating the repo.
+      - run: |
+          pip install -q pytest
+          bash examples/run-the-guards.sh
+
   probe:
     name: Probe selftest (real core vs real bridge)
     runs-on: ubuntu-latest

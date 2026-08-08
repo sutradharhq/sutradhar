@@ -1,0 +1,19 @@
+# The example app's CI. Note what it does NOT set.
+#
+# The env var behind the billing_integration marker never appears here, so
+# that whole tier is skipped on every run - and the suite still reports
+# green. This file is why the ~86-test incident was invisible: nobody
+# diffed the markers against the workflow.
+#
+# (The var is deliberately not named in this comment. The audit is a
+# TEXTUAL check, so even a mention in a comment would satisfy it - a
+# caveat stated in envgate.py's own docstring, and worth seeing once.)
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q

@@ -51,6 +51,17 @@ Added:
   the gate half: a mistyped rule id silently loses an attribution, so CI
   fails on one. The skill now ships the format it had always asked for.
 
+- **`examples/`**: a worked repo with seven planted defects and a green
+  test suite, plus `run-the-guards.sh` - ten seconds, no install, and the
+  guards surface every one of them. The pedagogy is the passing suite: the
+  defects live in a codebase whose own tests are green, which is the state
+  most codebases are in. The example is itself under guard (the runner
+  exits nonzero on any missed defect, and CI runs it), because a
+  walkthrough that has quietly stopped demonstrating fails in front of
+  exactly the person you least want it to. Frontend guards and drills are
+  deliberately excluded and the README says why, rather than turning a
+  ten-second demo into a five-minute install.
+
 Fixed (found by this release's own tests - recorded per doctrine 8.1):
 - the flight recorder's round-heading regex lacked `re.MULTILINE`, so
   `.search()` over a whole document never matched and NO round record was
@@ -123,6 +134,17 @@ Added:
   a logbook is never presented as telemetry (doctrine 5.1). `--check` is
   the gate half: a mistyped rule id silently loses an attribution, so CI
   fails on one. The skill now ships the format it had always asked for.
+
+- **`examples/`**: a worked repo with seven planted defects and a green
+  test suite, plus `run-the-guards.sh` - ten seconds, no install, and the
+  guards surface every one of them. The pedagogy is the passing suite: the
+  defects live in a codebase whose own tests are green, which is the state
+  most codebases are in. The example is itself under guard (the runner
+  exits nonzero on any missed defect, and CI runs it), because a
+  walkthrough that has quietly stopped demonstrating fails in front of
+  exactly the person you least want it to. Frontend guards and drills are
+  deliberately excluded and the README says why, rather than turning a
+  ten-second demo into a five-minute install.
 
 Fixed (found by this release's own tests - recorded per doctrine 8.1):
 - the flight recorder's round-heading regex lacked `re.MULTILINE`, so
