@@ -1,9 +1,24 @@
+---
+sutradhar_budget: <short-id>
+n: 200000
+n_unit: rows
+rps: 50
+p95_ms: 800
+memory_mb: 512
+ci_slack: 2.0
+---
+
 # Design note: <feature>
 
 <!-- The prevention discipline as a fillable template. Five minutes here
      is the cheapest engineering you will do all week; every section maps
      to a doctrine rule (1.1-1.4) with a named incident behind it. Delete
-     the comments as you fill it in. -->
+     the comments as you fill it in.
+
+     The frontmatter above is READ BY THE TEST SUITE. Delete any line you
+     genuinely have no number for; keep at least one. Flat `key: value`
+     scalars only - the parser refuses anything it would have to guess at.
+     See docs/design/lint-scan.md for a filled-in example. -->
 
 ## What and why
 
@@ -11,14 +26,32 @@ One paragraph. Who needs this, what decision or action it enables.
 
 ## Cardinalities and budgets  <!-- doctrine 1.1 -->
 
-<!-- Numbers, not adjectives. "Lots of rows" is not a cardinality. -->
+<!-- Numbers, not adjectives. "Lots of rows" is not a cardinality.
 
-| Dimension | Design N | Test-enforced at |
+     The numbers live in the frontmatter so a test can read them; this
+     table is for the humans, and for the reasoning the frontmatter cannot
+     carry. State the PROVENANCE of each figure (doctrine 5.1): which are
+     measured, which are chosen ceilings, which are guesses to revisit. -->
+
+| Dimension | Design N | Enforced by |
 |---|---|---|
-| rows / entities this must survive | | |
-| concurrent users / requests per second | | |
-| latency envelope (p95) | | |
-| memory envelope | | |
+| rows / entities this must survive | `n` | |
+| concurrent users / requests per second | `rps` | |
+| latency envelope (p95) | `p95_ms` | |
+| memory envelope | `memory_mb` | |
+
+The test that makes these binding:
+
+```python
+from sutradhar_guards.budget import budget
+
+def test_<feature>_at_design_scale():
+    with budget("<short-id>") as b:
+        run_the_thing(make_input(b.n))     # b.n IS the declared N
+```
+
+A budget nobody enforces is decoration; `budget.py <notes>/ --tests
+<tests>/` fails the build on any declared number no test mentions.
 
 ## Failure story  <!-- doctrine 1.4 -->
 

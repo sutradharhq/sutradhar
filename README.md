@@ -56,11 +56,15 @@ sutradhar/
 │   ├── frontend.md          The two-loop frontend playbook
 │   ├── ai-llm.md            Grounding, claim checking, evals, replay anchors
 │   ├── operations.md        Drills, exit-code discipline, verifying the null
+│   ├── roadmap-v0.3.md      What is shipping in v0.3, and what was deferred
+│   ├── design/
+│   │   └── lint-scan.md     This repo's own budget - a filled-in design note
 │   ├── multi-agent.md       Running many agents/sessions on one codebase without carnage
 │   └── templates/
 │       └── design-note.md   The prevention discipline as a fillable template
 ├── python/
 │   ├── sutradhar_guards/
+│   │   ├── budget.py              Design-time cardinalities that tests must enforce
 │   │   ├── verify_guard.py        Proves a guard can fail: reverts the fix, demands red
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
@@ -192,9 +196,21 @@ and reconcile the counts, soak unattended, upgrade in place. Every one of
 these found defects that no amount of code reading did.
 
 **State cardinalities before building.** Every feature names the N it must
-survive and its latency/memory envelope as numbers, at design time. Tests
-then enforce the envelope. This is the cheapest rule in the framework and
-the one whose absence cost us the most.
+survive and its latency/memory envelope as numbers, at design time. This is
+the cheapest rule in the framework and the one whose absence cost us the
+most, so it is not left to good intentions: the numbers go in the design
+note's frontmatter, the test reads its N from there rather than picking a
+comfortable one, and the gate fails on any declared number no test enforces.
+
+```python
+def test_fleet_sweep_at_design_scale():
+    with budget("fleet-sweep") as b:      # n, p95, memory from the design note
+        sweep(synth_meters(b.n))          # b.n IS the declared 200,000
+```
+
+Raising the design figure automatically makes the test harder. Lowering it
+is a visible diff in the note, which is exactly where that argument belongs
+- rather than a quietly weakened number in a test file nobody reads.
 
 ## Relationship to Reticle
 

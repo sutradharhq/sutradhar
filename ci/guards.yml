@@ -40,6 +40,12 @@ jobs:
       - name: Query-interpolation guard
         run: python scripts/interpolation_lint.py src/ --keywords sql
 
+      # Doctrine 1.1: every number declared in a design note must have a
+      # test behind it. A budget nobody enforces reads as a commitment
+      # and behaves like a wish.
+      - name: Declared budgets are enforced
+        run: python scripts/budget.py docs/design/ --tests tests/
+
       # The verifier must be able to catch a decorative guard, or it is one.
       - name: verify-guard selfcheck
         run: python scripts/verify_guard.py --selfcheck

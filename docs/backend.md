@@ -147,6 +147,54 @@ Rules that survived contact with a 4,000x scale jump:
   you think it does (a `def` dependency running in a threadpool got its
   context write silently discarded; the fix was `async def`).
 
+## Scale discipline starts at design time
+
+The cheapest rule in this framework is a sentence written before the code:
+*this must survive 200,000 meters, inside 800ms and 512MB.* The sentence
+costs nothing. Skipping it cost us a full scale pass and seventeen store
+crashes on a sweep that was flawless at demo scale.
+
+Put the numbers where a machine can read them - the design note's
+frontmatter - and let the test take its N from there:
+
+```python
+from sutradhar_guards.budget import budget
+
+def test_fleet_sweep_at_design_scale():
+    with budget("fleet-sweep") as b:
+        sweep(synth_meters(b.n))        # b.n IS the declared 200,000
+```
+
+Two properties fall out of that and both matter more than they look:
+
+- **Nobody hand-picks a comfortable N.** The number in the test is the
+  number in the design, always, because there is only one of them.
+- **Weakening a budget becomes an argument, not an edit.** Raising the
+  design figure shows up as a diff in a document a reviewer reads. Quietly
+  changing `200_000` to `2_000` in a test file does not.
+
+Then close the loop, because a budget nobody enforces is decoration in
+exactly the way an untested guard is:
+
+```bash
+python scripts/budget.py docs/design/ --tests tests/
+```
+
+It fails on any declared number that no test so much as mentions. Note what
+this gate is *not*: it does not ask "does this feature have a design note".
+That question measures paperwork, cannot be answered mechanically (what is
+a "feature"?), and is satisfied by an empty file. It asks the harder one -
+is every number you wrote down actually binding.
+
+Two honest limits worth knowing before you trust a green run. `memory_mb`
+is measured with `tracemalloc`, so it counts Python heap allocations and
+not process RSS - a good tripwire for "this structure grew unbounded", a
+bad one for "the container OOMed", where the drill remains the authority.
+And the latency check is a ceiling on the runs you performed, not a
+percentile: `p95_ms` records design intent, and a single sample above it
+fails. On shared CI runners declare `ci_slack: 2.0` in the note rather than
+inflating the real number, so the looseness stays visible.
+
 ## Numeric truth
 
 - Golden datasets with declared tolerances for anything numeric.

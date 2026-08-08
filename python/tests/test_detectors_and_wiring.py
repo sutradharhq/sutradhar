@@ -95,3 +95,34 @@ def test_blinded_interpolation_detector_fails_the_cli(tmp_path, monkeypatch):
     assert interpolation_lint.main([str(clean), "--keywords", "sql"]) == 0
     monkeypatch.setattr(interpolation_lint, "check_source", lambda *a, **k: [])
     assert interpolation_lint.main([str(clean), "--keywords", "sql"]) == 1
+
+
+# ── class ratchet: no package export may shadow a submodule ─────────────────
+
+def test_no_export_shadows_a_submodule():
+    """A package attribute with the same name as a submodule makes
+    `sutradhar_guards.X` mean the export or the module depending on import
+    order - a bug that only appears when a *second* test file imports things
+    in a different sequence.
+
+    Scar: `__init__` re-exported the `budget` context manager from the
+    `budget` module. test_budget.py passed alone and five of its tests
+    failed in the full suite. This walks every submodule instead of pinning
+    the one instance (doctrine 2.1)."""
+    import importlib
+    import pkgutil
+
+    import sutradhar_guards
+
+    shadowed = []
+    for info in pkgutil.iter_modules(sutradhar_guards.__path__):
+        exported = getattr(sutradhar_guards, info.name, None)
+        if exported is None:
+            continue
+        module = importlib.import_module(f"sutradhar_guards.{info.name}")
+        if exported is not module:
+            shadowed.append(
+                f"sutradhar_guards.{info.name} resolves to "
+                f"{type(exported).__name__} {exported!r}, not the submodule"
+            )
+    assert not shadowed, "\n".join(shadowed)

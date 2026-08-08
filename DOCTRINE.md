@@ -19,7 +19,12 @@ a one-sentence design-time statement.**
 
 **1.1 State your cardinalities and budgets before building.** Every feature
 design names the N it must survive (rows, users, requests per second) and
-its latency/memory envelope, as numbers. Tests then enforce the envelope.
+its latency/memory envelope, as numbers. Tests then enforce the envelope -
+mechanically: the numbers live in the design note's frontmatter, the test
+reads its N from there (`with budget("fleet-sweep") as b: ... b.n ...`), and
+`budget.py` fails the build on any declared number no test enforces. The
+gate is deliberately not "did you write a note" - that measures paperwork -
+but "is every number you wrote down actually binding".
 *Scar: an unbounded fleet sweep worked perfectly at demo scale (50 entities)
 and OOM-crashed the datastore at 200,000. The design-time sentence would
 have cost nothing; finding it cost a full scale pass and seventeen store

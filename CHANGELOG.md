@@ -25,7 +25,33 @@ Added:
   executable change. Wired into `bootstrap.sh`, `ci/guards.yml`, and this
   repo's own CI.
 
+- **`budget.py`**: doctrine 1.1 as a gate. Cardinalities and envelopes live
+  in the design note's frontmatter; the test reads its N from there
+  (`with budget("fleet-sweep") as b: ... b.n ...`) so nobody hand-picks a
+  comfortable size, and the CLI fails the build on any declared number no
+  test enforces. The gate is deliberately NOT "did you write a note" -
+  that measures paperwork - but "is every number you wrote down binding".
+  Stdlib-only strict frontmatter parser that refuses what it would have to
+  guess at; `tracemalloc` for the memory envelope with its limits stated
+  (Python heap, not RSS); `ci_slack` declared in the file so widening a
+  ceiling stays visible in the diff. The repo now carries its own budget
+  (`docs/design/lint-scan.md`) enforced in its own CI.
+
 Fixed (found by this release's own tests - recorded per doctrine 8.1):
+- the budget gate's parser strictness had no selfcheck behind it: mutation
+  testing showed that blinding the parser's refusal branch passed every
+  other planted case, so a malformed design note would have been read as
+  "no budget declared" - an unenforced number reporting as compliant. The
+  selfcheck grew four malformed-note cases.
+- `__init__` re-exported the `budget` context manager from the `budget`
+  module, so `sutradhar_guards.budget` meant the function or the submodule
+  depending on import order. test_budget.py passed alone and five of its
+  tests failed in the full suite. Fixed by not re-exporting it, and guarded
+  by a CLASS ratchet that walks every submodule
+  (`test_no_export_shadows_a_submodule`) rather than pinning the instance.
+- the budget selfcheck CRASHED rather than returning False when blinded,
+  so the CLI answered with a traceback instead of a verdict. A selfcheck
+  that dies is a selfcheck that failed, and now says so (doctrine 2.4).
 - verify-guard's first selfcheck run reported `DECORATION` for a docs-only
   commit: prose was classified as production code, so reverting a README
   and finding the guard still green read as a dead guard. A false
