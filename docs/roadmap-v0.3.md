@@ -44,20 +44,28 @@ Chosen first because it is the largest consequence-to-effort ratio in the
 table: the tested-but-half-dead fix cost a week, and the experiment that
 would have caught it takes a worktree and two test runs.
 
+### 2. `budget.py` - doctrine 1.1 becomes a gate
+
+The cardinality table is now machine-readable frontmatter, the test reads
+its N from the design note instead of picking a comfortable one, and the
+CLI fails on any declared number no test enforces.
+
+One design decision worth recording, because the obvious version is worse:
+the gate is **not** "does this feature have a design note". That is
+guessable, gameable, and it measures paperwork - you cannot mechanically
+decide what counts as a "feature", and any rule that tries will be either
+noisy or trivially satisfied by an empty file. The gate is the second,
+harder question: *is every number you declared actually enforced?* A budget
+written down and never enforced is decoration - the same disease as a guard
+that has never been shown to fail, and the same fix.
+
+Deferred within this item: a percentile mode. The envelope check is a
+CEILING on the runs performed, not a percentile estimate; `p95_ms` records
+design intent and a single sample over it fails. Real percentiles need a
+`samples=N` runner, which is worth having and is not worth blocking the
+gate on.
+
 ## Planned, in priority order
-
-### 2. The budget gate - compile design notes into tests (rule 1.1)
-
-`docs/templates/design-note.md` is prose nothing checks. Make the
-cardinality table machine-readable (YAML frontmatter), then ship:
-
-- a lint that fails when a new feature directory has no design note;
-- a generator that turns the declared envelope (`N=200_000`, `p95<800ms`,
-  `RSS<512MB`) into an enforcing test skeleton.
-
-The sentence that would have prevented the worst defect class becomes a
-test automatically. This is where the compounding is: written once,
-enforced forever.
 
 ### 3. The flight recorder - measure the harness itself (rules 8.1, 8.3)
 

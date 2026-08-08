@@ -9,8 +9,29 @@ Every rule below was earned by a real defect; the full stories are in
 
 1. **State cardinalities and budgets first.** Name the N this must survive
    (rows, users, requests/s) and the latency/memory envelope, as numbers, in
-   the plan or PR description. If you cannot name N, find out before writing
-   code.
+   the design note's frontmatter - not in the PR description, where nothing
+   can read them. If you cannot name N, find out before writing code.
+
+   ```
+   ---
+   sutradhar_budget: fleet-sweep
+   n: 200000
+   p95_ms: 800
+   memory_mb: 512
+   ---
+   ```
+
+   Then make it binding, reading the N from the note rather than picking a
+   comfortable one:
+
+   ```python
+   with budget("fleet-sweep") as b:
+       sweep(synth_meters(b.n))
+   ```
+
+   `python scripts/budget.py docs/design/ --tests tests/` fails on any
+   number you declared and no test enforces. Do not weaken a budget in the
+   test; change it in the note, where review can see it.
 2. **Write the failure story.** For each dependency touched: what does the
    user see when it is down, slow, or partial? "Same as success" means the
    design is not done.
