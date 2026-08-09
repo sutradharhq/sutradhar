@@ -5,6 +5,37 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
+## Unreleased
+
+**An assertion that cannot fail is not a test** (doctrine 3.7). The v0.3
+theme was moving rules from memory to mechanism; this is one more rule that
+had no mechanism, and it was found the hard way on a suite already running
+under these guards.
+
+The incident: 44 assertions of the form `expect(res.status).to.not.eq(500)`
+across 10 specs. That passes on 404, so a test aimed at a route the API no
+longer serves is green forever. Checked against the app's real route table,
+**28 references resolved to nothing** - a retired API prefix, three analytics
+endpoints, an audit surface that had moved, two that had changed HTTP verb.
+Months of green while asserting nothing about the product. Nothing in the
+framework covered it: the frontend rules reached reachability and EFFECT for
+the UI, but no rule reached the API layer and none asked whether an assertion
+could fail at all.
+
+Added:
+- **`dead_route_lint.py`** - two detectors because they catch different
+  halves. `find_unfailable_assertions` (excluding one bad outcome tolerates
+  every other) and `find_dead_routes` (the URL under test is absent from the
+  API's own route table). Route-source agnostic: OpenAPI paths, a Rails
+  dump, an Express walk. Ships with the two false-positive exclusions the
+  field run proved necessary - trailing-slash near-misses that frameworks
+  redirect, and `drill_url`-style keys carrying SPA routes rather than API
+  paths, which otherwise send you "fixing" correct code.
+- **Doctrine 3.7**, generalised past tests: when a check is cheap to satisfy
+  and expensive to verify, prove it can fail before trusting that it passed.
+- `docs/frontend.md` section with the wiring snippet.
+- 8 tests including both field-found false positives.
+
 ## v0.3.0 - 2026-08-08
 
 The theme: move rules out of memory and into mechanism. v0.2 made the

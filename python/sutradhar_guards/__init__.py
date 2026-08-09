@@ -13,6 +13,7 @@ earned it and the usage pattern.
   claim_check          ground every number in generated text (AI/LLM surfaces)
   golden               golden-dataset gate with declared tolerance + reasoned re-baseline
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
+  dead_route_lint      tests that cannot fail: weak assertions + dead routes
 """
 
 __version__ = "0.3.0"
@@ -42,6 +43,10 @@ from .verify_guard import (  # noqa: F401
 from .envgate import EnvGate, apply_env_gates, audit_skip_gates  # noqa: F401
 from .claim_check import extract_numbers, ground_claims  # noqa: F401
 from .golden import GoldenError, GoldenGate  # noqa: F401
+from .dead_route_lint import (  # noqa: F401
+    find_dead_routes,
+    find_unfailable_assertions,
+)
 from .detectors import (  # noqa: F401
     find_order_by_without_limit,
     find_unresolved_relative_imports,
