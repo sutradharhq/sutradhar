@@ -14,6 +14,7 @@ the exact defect 5.2 names.
 | R2-1 | med | 2.2 | rounds selfcheck | fixed | round-heading regex lacked re.MULTILINE, so no round record was ever parsed and an empty history reported as cheerfully as a real one |
 | R2-2 | med | 6.4 | building the example | fixed | the example's CI comment named BILLING_TESTS, satisfying the textual skip-gate audit and making the demo pass vacuously |
 | R2-3 | low | 8.2 | review | fixed | a stale "planned" entry for a shipped item survived in the roadmap; the doc contradicted the tree |
+| R2-4 | high | 3.6 | origin thread, on a suite already running these guards | deferred | 44 assertions of the shape `expect(res.status).to.not.eq(500)` pass on a 404; 28 of them targeted routes the API no longer serves. Months of green asserting nothing. No rule reached the API layer. See PR #6 |
 | R1-7 | med | 2.2 | - | deferred | verify_guard still mechanises only the revert half of 2.2 |
 | R1-8 | med | 1.1 | - | deferred | budget enforcement detection remains a text match |
 | R1-9 | low | 1.1 | - | deferred | budget latency check remains a single-sample ceiling |
@@ -60,3 +61,36 @@ decision it has no evidence for, which is the failure mode the thin-data
 refusal exists to prevent. Recorded rather than smoothed over, because a
 framework whose own artifacts quietly disagree with its actions is back to
 being ceremony.
+
+## The restart condition was tested the next day (R2-4)
+
+The stop decision above names the trigger for resuming work: *evidence from
+a repo that is not this one.* Something arrived against it within a day, in
+PR #6, from the origin thread - a defect class found on a suite **already
+running these guards**, which is the strongest form of evidence this
+framework can receive about its own gaps.
+
+It was declined, and the reasoning belongs here rather than in a closed PR
+nobody reads again:
+
+- **The source is not independent.** The origin codebase is the one this
+  doctrine was distilled from. Rule 8.4 asks for outside minds precisely
+  because a family of agents shares blind spots with itself; a finding from
+  the origin codebase is a second look, not a second observer.
+- **One incident, one lint, one repo.** The proposed rule (3.7, "an
+  assertion that cannot fail is not a test") would enter the doctrine on a
+  single incident with a detector that has run in exactly one place. Rule
+  8.1 admits a rule with the incident that paid for it, so the case is
+  genuinely arguable - which is why this is deferred rather than rejected.
+- **Timing.** Merging a fifth tool on the day the release closed *for
+  having too many unvalidated tools* is the accretion 8.2 warns about.
+
+The branch `guard/dead-route-assertions` is retained. What reopens this is a
+second repo hitting the same class - an assertion that excludes one bad
+outcome and tolerates every other - not the entry sitting in this register.
+
+Cited against **3.6** here (a spec can pass vacuously; measure reachability
+and effect, not string presence) rather than the proposed 3.7, because a
+round record may only cite rules the doctrine actually contains. `rounds.py
+--check` enforces that, and it would have caught the citation had it been
+written the other way.
