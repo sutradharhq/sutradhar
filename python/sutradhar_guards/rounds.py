@@ -56,6 +56,8 @@ round that found nothing because nobody looked hard produces the same row as
 a round that found nothing because there was nothing to find. The stop-rule
 verdict is evidence for a decision, not the decision.
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import json

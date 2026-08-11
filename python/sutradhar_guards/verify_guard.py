@@ -50,6 +50,8 @@ Honest limits, stated plainly:
     unrelated change in one file reverts both; split your commits (or pass
     `--code` explicitly) if that matters.
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import fnmatch

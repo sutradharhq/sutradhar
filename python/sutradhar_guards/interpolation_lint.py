@@ -1,3 +1,5 @@
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 #!/usr/bin/env python3
 """Guard: flag f-strings that interpolate values into a query language.
 

@@ -1,0 +1,33 @@
+Sutradhar
+Copyright 2026 Varun Mundra
+
+This product includes software developed by Varun Mundra
+(https://github.com/sutradharhq/sutradhar).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this work except in compliance with the License. You may obtain a copy
+of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.
+
+------------------------------------------------------------------------
+
+ATTRIBUTION, IN PLAIN TERMS
+
+This framework is copy-in by design: the guards, the probe and the skills
+are meant to be copied into your repository and edited freely. That is
+encouraged, and the License grants it.
+
+What the License asks in return (section 4) is that redistributions retain
+the copyright notice above, this NOTICE file, and the License itself. If you
+copy individual files, keep their headers. If you build something on top of
+this and pass it on, say where it came from.
+
+Using it privately requires nothing. Changing it requires nothing. Only
+passing it on carries the attribution requirement, and it is a small one.

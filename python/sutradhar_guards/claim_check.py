@@ -29,6 +29,8 @@ domain's conversions before trusting cross-unit grounding, because
 magnitude-only comparison let "12.4 MW" ground against a witnessed 12.4%
 in the incident above.
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import re

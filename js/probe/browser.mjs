@@ -1,3 +1,5 @@
+// Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+// Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 /**
  * Browser installer for the Sutradhar probe - the thin, DOM-touching half.
  *

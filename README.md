@@ -279,7 +279,14 @@ Semver on the file contracts (CLI flags, library APIs, baseline formats,
 probe endpoints), tagged releases, history in [CHANGELOG.md](CHANGELOG.md).
 Copy-in users upgrade by diffing against the tag they took.
 
-## License
+## License and attribution
 
-Apache-2.0. Use it, fork it, sell with it. If it saves you from shipping a
-silent zero, we are even.
+Apache-2.0, Copyright 2026 Varun Mundra. Use it, fork it, sell with it. If
+it saves you from shipping a silent zero, we are even.
+
+The framework is copy-in by design and the guards are meant to be edited
+freely once they are yours. Using it privately asks nothing of you. The one
+thing the licence asks (section 4) is that if you **pass it on**, you keep
+the copyright headers on the files you copied, the `LICENSE`, and the
+[`NOTICE`](NOTICE). `bootstrap.sh` copies the notice into your repo so this
+takes no effort; it is a small ask for a framework given away whole.

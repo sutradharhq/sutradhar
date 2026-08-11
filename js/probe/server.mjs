@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+// Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 /**
  * Sutradhar probe bridge - the local server between a running app and an
  * agent's terminal.

@@ -14,7 +14,8 @@ earned it and the usage pattern.
   golden               golden-dataset gate with declared tolerance + reasoned re-baseline
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
 """
-
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 __version__ = "0.3.0"
 
 from .ratchet import Ratchet, RatchetError, selfcheck_detector  # noqa: F401

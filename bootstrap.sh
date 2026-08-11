@@ -75,6 +75,13 @@ copy "$HERE/agent/skills/ops-drill.md"       "$SKILLS_DIR/ops-drill/SKILL.md"
 
 echo "docs (reference copies):"
 copy "$HERE/DOCTRINE.md" "$TARGET/docs/sutradhar-doctrine.md"
+
+# Apache-2.0 section 4(d): a redistribution must carry the NOTICE. The
+# copied files keep their own headers; this puts the notice where a reader
+# of YOUR repo will find it. Using it privately requires nothing - only
+# passing it on carries the requirement.
+echo "attribution:"
+copy "$HERE/NOTICE" "$TARGET/NOTICE.sutradhar"
 copy "$HERE/docs/templates/design-note.md" "$TARGET/docs/design/TEMPLATE.md"
 
 echo

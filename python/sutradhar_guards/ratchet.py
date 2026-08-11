@@ -41,6 +41,8 @@ Baselines are sorted JSON lists (or dicts for count mode), reviewed in the
 PR like any other file. A baseline diff that grows should be as alarming to
 a reviewer as a deleted test.
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import json

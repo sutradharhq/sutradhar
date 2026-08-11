@@ -1,3 +1,5 @@
+// Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+// Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 /**
  * Route sweep - the outer-loop baseline every app should have.
  *

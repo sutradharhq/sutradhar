@@ -39,6 +39,8 @@ And the audit, as a normal test:
         audit_skip_gates(GATES, search_globs=[".github/workflows/*.yml",
                                               "Makefile", "docker-compose*.yml"])
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import glob

@@ -15,6 +15,8 @@ defects the sweep had missed, and kept finding new ones as the codebase
 grew (a helper-level unit test structurally cannot see a handler's broken
 import - this walks every module without executing any).
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import ast

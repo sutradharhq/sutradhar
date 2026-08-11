@@ -55,6 +55,8 @@ Honest limits, stated plainly:
     that the assertion is meaningful. Pair it with `verify_guard.py` on the
     commit that introduces the budget if you want the stronger claim.
 """
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 from __future__ import annotations
 
 import os

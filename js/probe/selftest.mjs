@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+// Part of Sutradhar: https://github.com/sutradharhq/sutradhar
 /**
  * Probe selftest - runs the REAL ProbeCore against the REAL bridge over
  * real HTTP, so the two halves cannot drift. Only browser.mjs's thin
