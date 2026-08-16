@@ -68,7 +68,7 @@ sutradhar/
 │   ├── backend.md           Backend playbook: ratchets, honest degradation, scale discipline
 │   ├── frontend.md          The two-loop frontend playbook
 │   ├── ai-llm.md            Grounding, claim checking, evals, replay anchors
-│   ├── operations.md        Drills, exit-code discipline, verifying the null
+│   ├── operations.md        Drills, exit-code discipline, the observability floor (6.6)
 │   ├── roadmap-v0.3.md      What is shipping in v0.3, and what was deferred
 │   ├── design/
 │   │   └── lint-scan.md     This repo's own budget - a filled-in design note
@@ -88,7 +88,8 @@ sutradhar/
 │   │   ├── envgate.py             Pytest env-gating that audits its own skip gates
 │   │   ├── claim_check.py         Ground every number in LLM-generated text
 │   │   ├── golden.py              Golden-dataset gate with reasoned re-baseline
-│   │   └── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
+│   │   ├── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
+│   │   └── obsgate.py             Observability floor as a provenance gate (6.6)
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/
 │   ├── cypress/

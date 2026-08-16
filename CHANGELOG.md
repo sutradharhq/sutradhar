@@ -7,6 +7,29 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Doctrine 6.6: observability is a provenance gate.** The "Observability
+floor" prose in docs/operations.md is now a numbered rule, and it is
+mechanised. The line it draws, in the maintainer's words: every task
+becomes verifiable - a change to a running system is done when its effect
+is witnessable at a runtime surface, and a claim no surface witnessed does
+not leave the building. Promoted on two recorded incidents (rounds 3 and
+4), which is the 8.1 bar; see docs/rounds/round-005.md.
+
+- New tool `obsgate.py`: takes a declared floor (JSON manifest) and a
+  metrics payload (Prometheus text, file or endpoint) and answers
+  WITNESSED / UNWITNESSED / INCONCLUSIVE. An empty payload FAILS - "no
+  data" and "all zero" must never read the same (2.4) - and an unreachable
+  endpoint is INCONCLUSIVE, never a pass. Cardinality caps mechanise the
+  route-template-never-raw-path line. Stdlib-only, copy-in, exit codes
+  0/1/2/3.
+- Selfcheck mutation-verified five ways; the first run survived a blinded
+  empty-payload branch by refusing for the wrong reason, so the selfcheck
+  now asserts the diagnosis, not just the verdict.
+- Wired into CI (both Python versions), bootstrap.sh, and the reachability
+  ratchet covered it automatically on the day it landed - which was the
+  point of building that ratchet as a class invariant.
+
+
 **Every tool's `--selfcheck` is now reachable, and its exit code means
 something.** Five of ten modules (`ratchet`, `envgate`, `claim_check`,
 `golden`, `detectors`) had no `__main__` block at all: `python -m

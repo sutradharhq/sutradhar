@@ -48,7 +48,7 @@ Before filing any finding, prove the test itself is valid:
 - A false finding costs more trust than no finding, because the next real
   one gets discounted.
 
-## Observability floor
+## Observability floor (doctrine 6.6)
 
 Before anything runs unattended, four surfaces have metrics: requests
 (count + latency by route template, not raw path - cardinality), jobs
@@ -56,6 +56,20 @@ Before anything runs unattended, four surfaces have metrics: requests
 up/down gauges. The gauge probes must not block the serving path.
 A metrics endpoint that cannot load its client library degrades to an
 honest comment block, never an empty 200 a scraper reads as "all zero".
+
+This floor is a **provenance gate**, and it is mechanised: `obsgate.py`
+takes the floor as a JSON manifest and a metrics payload (file or endpoint)
+and answers WITNESSED / UNWITNESSED / INCONCLUSIVE. Wire it into CI against
+a staging endpoint, or into a deploy gate against production:
+
+    python obsgate.py --metrics https://svc/metrics --floor obs_floor.json
+
+The line it draws: a task that changes a running system is done when its
+effect is witnessable at one of these surfaces, and a claim about a running
+system that no surface witnessed does not leave the building (5.1). An
+empty payload FAILS - "no data" and "all zero" must never read the same -
+and an unreachable endpoint is INCONCLUSIVE, never a pass, because a dead
+endpoint witnesses nothing.
 
 ## Shared-host hygiene
 

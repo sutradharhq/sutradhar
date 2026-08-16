@@ -34,6 +34,7 @@ jobs:
         run: |
           python python/sutradhar_guards/swallow_lint.py --selfcheck
           python python/sutradhar_guards/interpolation_lint.py --selfcheck
+          python python/sutradhar_guards/obsgate.py --selfcheck
       - name: budget gate (this repo's own declared envelopes)
         # Two things at once: the gate's selfcheck (a planted
         # unenforced budget must be caught) and the real check that
@@ -59,6 +60,7 @@ jobs:
           python3.9 python/sutradhar_guards/verify_guard.py --selfcheck
           python3.9 python/sutradhar_guards/budget.py --selfcheck
           python3.9 python/sutradhar_guards/rounds.py --selfcheck
+          python3.9 python/sutradhar_guards/obsgate.py --selfcheck
 
   examples:
     name: The worked example still catches its planted defects

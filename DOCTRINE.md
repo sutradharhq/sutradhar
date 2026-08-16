@@ -197,6 +197,22 @@ costs more trust than no finding.*
 not a "done" sticker. *Scar: an authorization layer declared mature regrew a
 cross-tenant read within five rounds.*
 
+**6.6 Observability is a provenance gate.** A change to a running system is
+done only when its effect can be witnessed at a runtime surface, and a claim
+about a running system is worth exactly what the surface that witnessed it
+is worth. The floor, before anything runs unattended: requests (count +
+latency by route template, never raw path), jobs (fired, succeeded, failed),
+ingest chokepoints, and dependency up/down gauges. A surface that cannot
+report must say so - an endpoint that degrades to an empty 200 turns "no
+data" into "all zero", and every claim read from it afterward is fabricated
+with extra steps. This is 5.1 pointed at runtime: unwitnessed numbers do not
+leave the building, and unwitnessable tasks are not done. *Scar, twice: a
+verification read a queryable proxy three times while the surface a person
+actually saw disagreed throughout (round 3); a review read exit 0 from five
+tools whose selfchecks did not exist - the process terminated, nothing was
+witnessed, and the zero was reported as a pass (round 4). Both times the
+proxy agreed, so the looking stopped.*
+
 ## 7. Multi-session / multi-agent workflow
 
 **7.1 Orient before starting.** Read the owning plan or tracker AND

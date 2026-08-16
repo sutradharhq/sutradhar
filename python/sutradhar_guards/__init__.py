@@ -13,6 +13,7 @@ earned it and the usage pattern.
   claim_check          ground every number in generated text (AI/LLM surfaces)
   golden               golden-dataset gate with declared tolerance + reasoned re-baseline
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
+  obsgate              observability floor as a provenance gate (doctrine 6.6)
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
@@ -63,6 +64,13 @@ _EXPORTS = {
     "GoldenGate": "golden",
     "find_order_by_without_limit": "detectors",
     "find_unresolved_relative_imports": "detectors",
+    # obsgate's verdict constants are NOT exported: verify_guard already
+    # owns the package-level INCONCLUSIVE, and two constants with one name
+    # and different owners is the shadowing class again. Import verdicts
+    # from the submodule: from sutradhar_guards.obsgate import WITNESSED
+    "parse_metrics": "obsgate",
+    "check_floor": "obsgate",
+    "FloorResult": "obsgate",
 }
 
 __all__ = sorted(_EXPORTS)

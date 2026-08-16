@@ -42,6 +42,7 @@ copy "$HERE/python/sutradhar_guards/interpolation_lint.py" "$TARGET/scripts/inte
 copy "$HERE/python/sutradhar_guards/verify_guard.py"       "$TARGET/scripts/verify_guard.py"
 copy "$HERE/python/sutradhar_guards/budget.py"             "$TARGET/scripts/budget.py"
 copy "$HERE/python/sutradhar_guards/rounds.py"             "$TARGET/scripts/rounds.py"
+copy "$HERE/python/sutradhar_guards/obsgate.py"            "$TARGET/scripts/obsgate.py"
 copy "$HERE/python/sutradhar_guards/ratchet.py"            "$TARGET/tests/sutradhar/ratchet.py"
 copy "$HERE/python/sutradhar_guards/envgate.py"            "$TARGET/tests/sutradhar/envgate.py"
 
