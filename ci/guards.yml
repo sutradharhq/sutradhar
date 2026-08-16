@@ -55,6 +55,28 @@ jobs:
       - name: verify-guard selfcheck
         run: python scripts/verify_guard.py --selfcheck
 
+      # The gate that makes every other number here trustworthy must itself
+      # be shown to work (doctrine 6.6, and 2.2 applied to it).
+      - name: obsgate selfcheck
+        run: python scripts/obsgate.py --selfcheck
+
+      # Doctrine 6.6: the observability floor as a provenance gate. Point
+      # this at a staging or preview endpoint and it answers whether the
+      # surfaces any later claim will lean on are actually live. Uncomment
+      # once you have an endpoint and a floor manifest; leaving it
+      # commented is honest, faking a green one is not.
+      #
+      # Exit 0 WITNESSED / 1 UNWITNESSED / 3 INCONCLUSIVE - and 3 is not a
+      # pass, so do NOT add `|| true` here. An endpoint you could not read
+      # tells you nothing, and a step that swallows that is the empty-200
+      # lie one layer up.
+      #
+      # - name: Observability floor is witnessed
+      #   run: |
+      #     python scripts/obsgate.py \
+      #       --metrics "${{ secrets.STAGING_METRICS_URL }}" \
+      #       --floor obs_floor.json
+
       # Doctrine 2.2, enforced per PR rather than per honour system: for a
       # commit that claims to fix something, revert its production half and
       # require the named guard to go red. Set GUARD_CMD in the PR body, a

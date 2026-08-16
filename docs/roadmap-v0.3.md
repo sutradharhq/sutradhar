@@ -144,7 +144,7 @@ not this one. Not the backlog still having entries.
 
 ## Planned, if the evidence arrives
 
-### 5. Commit conformance - ratchet the workflow (AGENTS.md 8, 11, 12)
+### 5. Commit conformance - ratchet the workflow (AGENTS.md 9, 12, 13)
 
 The agent operating rules are good and unenforced. A pre-push hook or CI
 job can mechanically check most of them: a fix-shaped commit with no test

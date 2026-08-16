@@ -55,6 +55,23 @@ front of you, cheaply, before a customer makes them fail expensively.
    shared machine is the WEAKER form and scores accordingly. A sleeping
    laptop is not elapsed service time; report observed gaps, never assume
    continuity. The strong form is a second operator on a clean host.
+8. **Gate the observability floor before the soak, not after** (doctrine
+   6.6). A soak is only as good as the surfaces watching it: four hours of
+   "no errors" from an endpoint serving an empty 200 is four hours of no
+   information reported as a clean run. Run the floor gate first, and
+   treat its verdict as the drill's own precondition:
+
+   ```bash
+   python scripts/obsgate.py --metrics http://localhost:9090/metrics \
+                             --floor obs_floor.json
+   ```
+
+   Exit 0 = WITNESSED, the surfaces are live and within cardinality caps.
+   Exit 1 = UNWITNESSED, a surface is missing or empty - fix that before
+   the drill, because every observation after it is unfounded. Exit 3 =
+   INCONCLUSIVE, the endpoint could not be read at all, which is never a
+   pass. A drill whose floor gate is UNWITNESSED records "not-reached",
+   not "green".
 
 ## The output
 

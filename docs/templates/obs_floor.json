@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "Observability floor for doctrine 6.6, read by obsgate.py.",
+    "",
+    "Each surface names a metric family a later claim will lean on. The gate",
+    "answers WITNESSED / UNWITNESSED / INCONCLUSIVE against a live payload:",
+    "",
+    "  python scripts/obsgate.py --metrics http://localhost:9090/metrics \\",
+    "                            --floor obs_floor.json",
+    "",
+    "Edit the patterns to YOUR metric names - the four surfaces below are the",
+    "floor, not the ceiling. Delete a surface only when you can say what claim",
+    "you are giving up the right to make.",
+    "",
+    "max_label_cardinality is the route-template-never-raw-path rule made",
+    "mechanical: a `route` label carrying every distinct URL blows the cap and",
+    "is a memory bomb in the metrics store. Set the cap near your real route",
+    "count, not near your traffic."
+  ],
+  "surfaces": [
+    {
+      "name": "requests",
+      "pattern": "^http_requests_(total|duration_seconds.*)$",
+      "min_series": 1,
+      "max_label_cardinality": { "route": 200 }
+    },
+    {
+      "name": "jobs",
+      "pattern": "^jobs_(fired|succeeded|failed)_total$",
+      "min_series": 3
+    },
+    {
+      "name": "ingest",
+      "pattern": "^ingest_(lag_seconds|queue_depth)$",
+      "min_series": 1
+    },
+    {
+      "name": "dependencies",
+      "pattern": "^dependency_up$",
+      "min_series": 1
+    }
+  ]
+}

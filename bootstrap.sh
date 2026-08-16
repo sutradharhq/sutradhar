@@ -84,6 +84,7 @@ copy "$HERE/DOCTRINE.md" "$TARGET/docs/sutradhar-doctrine.md"
 echo "attribution:"
 copy "$HERE/NOTICE" "$TARGET/NOTICE.sutradhar"
 copy "$HERE/docs/templates/design-note.md" "$TARGET/docs/design/TEMPLATE.md"
+copy "$HERE/docs/templates/obs_floor.json" "$TARGET/obs_floor.json"
 
 echo
 echo "done: $copied copied, $skipped skipped (existing files untouched)"
@@ -93,6 +94,7 @@ echo "  1. record today's floor:   python scripts/swallow_lint.py <src>/ --updat
 echo "  2. run the injection lint: python scripts/interpolation_lint.py <src>/ --keywords sql"
 echo "  2c. after each robustness round: python scripts/rounds.py docs/rounds/ --floors ."
 echo "  2a. gate your declared budgets: python scripts/budget.py docs/design/ --tests tests/"
+echo "  2d. edit obs_floor.json to your metric names, then: python scripts/obsgate.py --metrics <url> --floor obs_floor.json"
 echo "  2b. prove your next fix's guard is real:"
 echo "      python scripts/verify_guard.py --guard-cmd \"pytest tests/test_the_fix.py\""
 echo "  3. configure uiGuards in cypress/support/e2e.ts and adapt the route sweep"

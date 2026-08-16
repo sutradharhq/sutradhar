@@ -57,60 +57,80 @@ Every rule below was earned by a real defect; the full stories are in
    error.
 7. **No unbounded reads.** Any query or sweep over a collection that grows
    with usage gets a cap and an honest too-large refusal.
+8. **Witness the effect at a runtime surface.** A change to a running system
+   is done when its effect is visible on a surface that outlives your
+   session - a metric, a log line, a queryable row - not when the deploy
+   command exited 0. Before anything runs unattended the floor is four
+   surfaces: requests (by route template, never raw path - cardinality),
+   jobs (fired, succeeded, failed), ingest chokepoints, and dependency
+   up/down gauges. A surface that cannot report must say so: an endpoint
+   answering with an empty 200 has turned "no data" into "all zero", and
+   every number read from it afterward is fabricated with extra steps.
+   `obsgate.py` checks a declared floor and answers WITNESSED /
+   UNWITNESSED / INCONCLUSIVE - and a source it could not read is
+   INCONCLUSIVE, never a pass.
 
 ## Before committing
 
-8. **Every fix ships with a guard in the same commit.** Prefer extending an
+9. **Every fix ships with a guard in the same commit.** Prefer extending an
    existing class ratchet over adding a point test. New test files are the
    exception, not the rule.
-9. **Mutation-verify the guard.** Revert the fix: the test must go red.
-   If you cannot make the guard fail, the guard is decoration - fix the
-   guard, not the report. Do not do this by hand and do not claim it
-   without running it:
+10. **Mutation-verify the guard.** Revert the fix: the test must go red.
+    If you cannot make the guard fail, the guard is decoration - fix the
+    guard, not the report. Do not do this by hand and do not claim it
+    without running it:
 
-   ```bash
-   python scripts/verify_guard.py --guard-cmd "<the command that runs your guard>"
-   ```
+    ```bash
+    python scripts/verify_guard.py --guard-cmd "<the command that runs your guard>"
+    ```
 
-   Exit 0 = the guard is real. Exit 1 = it passed without the fix and is
-   decoration. Exit 2 = inconclusive, which is never a pass. Paste the
-   verdict into the PR; "I verified it" is not evidence.
-10. **Test through the route, not just the helper.** A helper-level test
+    Exit 0 = the guard is real. Exit 1 = it passed without the fix and is
+    decoration. Exit 2 = inconclusive, which is never a pass. Paste the
+    verdict into the PR; "I verified it" is not evidence.
+11. **Test through the route, not just the helper.** A helper-level test
     structurally cannot see an import error in the handler that calls it.
-11. **Stage only named files. Never `git add -A`.** Check
+12. **Stage only named files. Never `git add -A`.** Check
     `git status --porcelain` after staging, before committing, every time.
     Never touch other sessions' work-in-progress.
-12. **Update the docs the same commit.** A stale status doc misleads every
+13. **Update the docs the same commit.** A stale status doc misleads every
     future session, including your own next one.
 
 ## When investigating
 
-13. **Verify a finding refutes the null before filing it.** Prove the test
+14. **Verify a finding refutes the null before filing it.** Prove the test
     itself is valid first. A false finding costs more trust than no
     finding.
-14. **Prove pre-existing vs regression before touching a failure.** Run the
+15. **Prove pre-existing vs regression before touching a failure.** Run the
     same test at the baseline commit (a worktree makes this cheap). Date
     root causes with `git log -S`.
-15. **Check the premise against the code before implementing.** Backlog
+16. **Check the premise against the code before implementing.** Backlog
     one-liners are wrong in both directions; read the actual call path
     first.
-16. **Record what you ruled out** where the next session will look.
+17. **Record what you ruled out** where the next session will look.
 
 ## Multi-agent hygiene
 
-17. **One worktree per agent.** Explicit staging is not sufficient
+18. **One worktree per agent.** Explicit staging is not sufficient
     protection on a shared tree; a parallel session's `git add <file>` can
     capture your unstaged edits.
-18. **Serialize runs that share a backend.** Concurrent test runs against
+19. **Serialize runs that share a backend.** Concurrent test runs against
     one service poison each other's verdicts.
-19. **Bounded waits only.** No endless polling. If a wait loop's producer
+20. **Bounded waits only.** No endless polling. If a wait loop's producer
     dies, the loop spins forever.
 
 ## Honesty in output
 
-20. **Report outcomes faithfully.** Tests failed: say so, with the output.
+21. **Report outcomes faithfully.** Tests failed: say so, with the output.
     A step was skipped: say that. Never present a truncated run as
     complete.
-21. **Every number you publish carries its provenance** - measured,
+22. **An exit code is not a witness.** It is a claim about a process, not
+    about a check. It becomes evidence only in pairs: a known-good input
+    exits 0 AND a known-bad input exits non-zero. Before reporting a check
+    green, confirm the check exists and can fail - `--selfcheck` on a tool
+    with no argument parser exits 0 because importing a module succeeds,
+    and reads exactly like a pass. When your instrument and a human's
+    observation disagree, the instrument is on trial first.
+23. **Every number you publish carries its provenance** - measured,
     estimated (with assumptions), or illustrative. In the artifact, not in
-    your head.
+    your head. A number read off a surface that was not witnessed is not
+    measured, whatever its decimal places suggest.

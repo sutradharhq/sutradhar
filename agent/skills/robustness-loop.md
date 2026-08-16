@@ -102,6 +102,15 @@ rested lens regrows findings). The proven set:
   (shared failure means harness, not regression).
 - For data fixes, verify in the datastore directly, independent of test
   assertions.
+- **Confirm each check you are about to report can fail.** An exit code is
+  a claim about a process, not about a check (doctrine 6.6): a
+  `--selfcheck` on a tool with no argument parser exits 0 because the
+  import succeeded, and reads exactly like a pass. The pair is the
+  evidence - known-good exits 0 AND known-bad exits non-zero. Round 4 of
+  this repo's own register was a review reporting five such zeros green.
+- For anything touching a running system, the effect must be visible on a
+  surface that outlives the round; `obsgate.py` gates that floor and
+  answers INCONCLUSIVE rather than passing when it cannot read the source.
 - End the round with the full suite green, exit 0, exact counts recorded.
 
 ## Phase 6: record, commit, close
