@@ -113,3 +113,76 @@ def audit_skip_gates(
         # passing silently would be exactly the vacuity it exists to catch.
         return [f"<no files matched {search_globs} under {root.resolve()}>"]
     return [g.env_var for g in gates if g.env_var not in corpus]
+
+
+def selfcheck() -> bool:
+    """Exercise the audit's three verdicts, including the vacuity guard.
+
+    The third case is the one that matters: an audit whose globs match no
+    files must FAIL, not pass quietly. A skip-gate audit that ran over an
+    empty corpus and reported "nothing missing" is the exact vacuity these
+    gates exist to catch.
+    """
+    import tempfile
+
+    gates = [EnvGate("slow", "SLOW_TESTS", "the slow tier")]
+    ok = True
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "ci").mkdir()
+
+        (root / "ci" / "none.yml").write_text("jobs:\n  test:\n    run: pytest\n")
+        missing = audit_skip_gates(gates, ["ci/*.yml"], root)
+        if missing != ["SLOW_TESTS"]:
+            print(f"[envgate] SELFCHECK FAILED: unset gate not reported: {missing}")
+            ok = False
+
+        (root / "ci" / "sets.yml").write_text("env:\n  SLOW_TESTS: 1\n")
+        missing = audit_skip_gates(gates, ["ci/*.yml"], root)
+        if missing != []:
+            print(f"[envgate] SELFCHECK FAILED: set gate reported missing: {missing}")
+            ok = False
+
+        missing = audit_skip_gates(gates, ["nope/*.yml"], root)
+        if not (len(missing) == 1 and "no files matched" in missing[0]):
+            print(f"[envgate] SELFCHECK FAILED: empty corpus passed quietly: {missing}")
+            ok = False
+
+    import os as _os
+
+    gate = EnvGate("slow", "ZZ_ENVGATE_SELFCHECK")
+    _os.environ.pop("ZZ_ENVGATE_SELFCHECK", None)
+    if gate.enabled:
+        print("[envgate] SELFCHECK FAILED: gate enabled with no env var set")
+        ok = False
+    _os.environ["ZZ_ENVGATE_SELFCHECK"] = "1"
+    if not gate.enabled:
+        print("[envgate] SELFCHECK FAILED: gate disabled with env var set to 1")
+        ok = False
+    _os.environ.pop("ZZ_ENVGATE_SELFCHECK", None)
+
+    if ok:
+        print("[envgate] selfcheck ok: unset reported, set cleared, empty corpus refused")
+    return ok
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or "--selfcheck" in argv:
+        return 0 if selfcheck() else 1
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        return 0
+    print(
+        f"[envgate] unknown argument(s): {' '.join(argv)}\n"
+        f"envgate is a library; its CLI exists to run --selfcheck.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

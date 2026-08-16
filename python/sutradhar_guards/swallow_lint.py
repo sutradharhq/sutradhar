@@ -176,6 +176,11 @@ def selfcheck() -> bool:
     ok = len(bad) == 2 and len(good) == 0
     if not ok:
         print(f"[swallow-lint] SELFCHECK FAILED: bad={bad} good={good}")
+    else:
+        print(
+            "[swallow-lint] selfcheck ok: silent swallow caught, handled "
+            "exception passed"
+        )
     return ok
 
 
@@ -186,6 +191,9 @@ def _rel(p: Path) -> str:
         return str(p.resolve().relative_to(Path.cwd()))
     except ValueError:
         return str(p)
+
+
+_KNOWN_FLAGS = {"--allow-call", "--baseline", "--selfcheck", "--update-baseline", "--help", "-h"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -206,6 +214,14 @@ def main(argv: list[str] | None = None) -> int:
         elif a == "--allow-call":
             extra_calls.add(argv[i + 1]); i += 2
         elif a.startswith("--"):
+            # An unrecognised flag must NOT be ignored. Silently
+            # skipping it means a typo like `--selfchek` runs the
+            # default scan and exits 0, which reads as a pass.
+            if a not in _KNOWN_FLAGS:
+                print(
+                    f"[swallow-lint] unknown flag: {a}", file=sys.stderr
+                )
+                return 2
             i += 1
         else:
             paths.append(Path(a)); i += 1

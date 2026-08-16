@@ -184,10 +184,18 @@ def selfcheck() -> bool:
     ok = len(bad) == 1 and len(good) == 0
     if not ok:
         print(f"[interpolation-lint] SELFCHECK FAILED: bad={bad} good={good}")
+    else:
+        print(
+            "[interpolation-lint] selfcheck ok: interpolated query caught, "
+            "parameterised query passed"
+        )
     return ok
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
+
+_KNOWN_FLAGS = {"--allowlist", "--keywords", "--safe-call", "--selfcheck", "--strict", "--help", "-h"}
+
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -212,6 +220,14 @@ def main(argv: list[str] | None = None) -> int:
         elif a == "--allowlist":
             allowlist |= set(json.loads(Path(argv[i + 1]).read_text())); i += 2
         elif a.startswith("--"):
+            # An unrecognised flag must NOT be ignored. Silently
+            # skipping it means a typo like `--selfchek` runs the
+            # default scan and exits 0, which reads as a pass.
+            if a not in _KNOWN_FLAGS:
+                print(
+                    f"[interpolation-lint] unknown flag: {a}", file=sys.stderr
+                )
+                return 2
             i += 1
         else:
             paths.append(Path(a)); i += 1

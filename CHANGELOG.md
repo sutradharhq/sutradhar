@@ -5,6 +5,36 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
+## Unreleased
+
+**Every tool's `--selfcheck` is now reachable, and its exit code means
+something.** Five of ten modules (`ratchet`, `envgate`, `claim_check`,
+`golden`, `detectors`) had no `__main__` block at all: `python -m
+sutradhar_guards.envgate --selfcheck` ignored the flag, imported the module
+and exited 0. A weekly review read those zeros as passing checks. Found by
+the review routine's first run; see docs/rounds/round-004.md.
+
+- Those five modules gain a CLI and a real `selfcheck()`, each exercising the
+  behaviour the module would be worthless without - `golden` refuses an
+  unreasoned re-baseline, `ratchet` refuses an unbanked improvement,
+  `envgate` refuses an audit over an empty corpus, `detectors` demands its
+  planted known-bad inputs are found.
+- **Unknown flags now exit 2** in `budget`, `rounds`, `swallow_lint` and
+  `interpolation_lint`. They previously skipped anything starting with `--`,
+  so a typo such as `--selfchek` ran the default scan and exited 0. The first
+  thing this caught was a malformed command in the reviewer's own health
+  script.
+- **Every selfcheck reports on success.** Seven of eight passed silently; a
+  check that prints nothing cannot be distinguished from one that never ran.
+- `__init__` resolves exports lazily (PEP 562). Eager submodule imports made
+  `python -m` emit a `RuntimeWarning` on every CLI run of six tools. The
+  public API is unchanged and `budget` still resolves to the submodule.
+- New class ratchet `python/tests/test_selfcheck_reachability.py` walks every
+  module in the package and asserts, for each: `--selfcheck` exits 0 and
+  names itself, an unknown flag exits non-zero, and no `RuntimeWarning` is
+  emitted. Shown red before the fixes (25 failed), green after (31 passed),
+  and mutation-verified by deleting `golden`'s `__main__`.
+
 ## v0.3.0 - 2026-08-08
 
 The theme: move rules out of memory and into mechanism. v0.2 made the

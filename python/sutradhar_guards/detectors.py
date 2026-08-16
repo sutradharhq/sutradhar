@@ -156,3 +156,78 @@ def find_order_by_without_limit(source: str) -> list[int]:
         if _ORDER_RE.search(text) and not _BOUND_RE.search(text):
             hits.append(node.lineno)
     return hits
+
+
+def selfcheck() -> bool:
+    """Plant a known-bad input for each detector and demand it is found.
+
+    This is `selfcheck_detector`'s own argument applied to the shipped
+    detectors: a detector edited into vacuity - a broken regex, a renamed
+    AST node - passes every real file forever and only a planted bad case
+    catches it. The clean-input cases matter equally: a detector that flags
+    everything is removed from CI within a week and protects nothing after.
+    """
+    import tempfile
+
+    ok = True
+
+    def _fail(msg: str) -> None:
+        nonlocal ok
+        print(f"[detectors] SELFCHECK FAILED: {msg}")
+        ok = False
+
+    if not find_order_by_without_limit('q = "SELECT * FROM t ORDER BY ts"'):
+        _fail("uncapped ORDER BY in a plain string was not flagged")
+    if not find_order_by_without_limit('q = f"SELECT * FROM {tbl} ORDER BY ts"'):
+        _fail("uncapped ORDER BY inside an f-string was not flagged")
+    if find_order_by_without_limit('q = "SELECT * FROM t ORDER BY ts LIMIT 100"'):
+        _fail("ORDER BY carrying a LIMIT was flagged anyway")
+    if find_order_by_without_limit('q = "SELECT * FROM t"'):
+        _fail("a query with no ORDER BY at all was flagged")
+
+    with tempfile.TemporaryDirectory() as td:
+        pkg = Path(td) / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        (pkg / "real.py").write_text("VALUE = 1\n")
+
+        (pkg / "good.py").write_text("from .real import VALUE\n")
+        if find_unresolved_relative_imports(pkg):
+            _fail("an import that resolves was reported as broken")
+
+        (pkg / "bad_module.py").write_text("from .nope import thing\n")
+        if not find_unresolved_relative_imports(pkg):
+            _fail("an import of a missing MODULE was not flagged")
+        (pkg / "bad_module.py").unlink()
+
+        (pkg / "bad_name.py").write_text("from .real import MISSING\n")
+        if not find_unresolved_relative_imports(pkg):
+            _fail("an import of a missing NAME was not flagged")
+
+    if ok:
+        print(
+            "[detectors] selfcheck ok: ORDER BY (string + f-string) caught, "
+            "LIMIT respected, unresolved module and name both caught"
+        )
+    return ok
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or "--selfcheck" in argv:
+        return 0 if selfcheck() else 1
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        return 0
+    print(
+        f"[detectors] unknown argument(s): {' '.join(argv)}\n"
+        f"detectors is a library; its CLI exists to run --selfcheck.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

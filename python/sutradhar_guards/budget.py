@@ -395,10 +395,18 @@ def _selfcheck_body() -> bool:
             except BudgetError:
                 pass
             note.unlink()
+    if ok:
+        print(
+            "[budget] selfcheck ok: unenforced budget caught, latency ceiling "
+            "enforced, empty envelope refused, malformed note refused"
+        )
     return ok
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
+
+_KNOWN_FLAGS = {"--tests", "--selfcheck", "--help", "-h"}
+
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -415,6 +423,14 @@ def main(argv: list[str] | None = None) -> int:
         if argv[i] == "--tests":
             test_root = argv[i + 1]; i += 2
         elif argv[i].startswith("--"):
+            # An unrecognised flag must NOT be ignored. Silently
+            # skipping it means a typo like `--selfchek` runs the
+            # default scan and exits 0, which reads as a pass.
+            if argv[i] not in _KNOWN_FLAGS:
+                print(
+                    f"[budget] unknown flag: {argv[i]}", file=sys.stderr
+                )
+                return 2
             i += 1
         else:
             positional.append(argv[i]); i += 1

@@ -129,3 +129,94 @@ def _close(want: float, got: float, tol: float) -> bool:
     if want == 0:
         return abs(got) <= tol
     return abs(got - want) / abs(want) <= tol
+
+
+def selfcheck() -> bool:
+    """Exercise the four behaviours a golden gate is worthless without.
+
+    The unreasoned-re-baseline refusal is the load-bearing one. A gate that
+    lets `GOLDEN_UPDATE=1` overwrite the baseline without stating why turns
+    every future mismatch into a shrug and a re-record.
+    """
+    import tempfile
+
+    ok = True
+
+    def _fail(msg: str) -> None:
+        nonlocal ok
+        print(f"[golden] SELFCHECK FAILED: {msg}")
+        ok = False
+
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "baseline.json"
+        gate = GoldenGate(path, tolerance_rel=0.01)
+
+        try:
+            gate.check({"loss": 1.0}, update=False)
+            _fail("a missing golden file passed instead of refusing")
+        except GoldenError:
+            pass
+
+        os.environ.pop("GOLDEN_REASON", None)
+        try:
+            gate.check({"loss": 1.0}, update=True)
+            _fail("re-baselined with no GOLDEN_REASON")
+        except GoldenError:
+            pass
+
+        os.environ["GOLDEN_REASON"] = "initial baseline for selfcheck"
+        try:
+            gate.check({"loss": 1.0, "name": "run-a"}, update=True)
+        except GoldenError as exc:
+            _fail(f"reasoned re-baseline refused: {exc}")
+        os.environ.pop("GOLDEN_REASON", None)
+
+        try:
+            gate.check({"loss": 1.005, "name": "run-a"}, update=False)
+        except GoldenError as exc:
+            _fail(f"a value inside tolerance was rejected: {exc}")
+
+        try:
+            gate.check({"loss": 1.5, "name": "run-a"}, update=False)
+            _fail("a value outside tolerance passed")
+        except GoldenError:
+            pass
+
+        try:
+            gate.check({"loss": 1.0, "name": "run-a", "extra": 1}, update=False)
+            _fail("a NEW key not present in the golden file passed")
+        except GoldenError:
+            pass
+
+    if not _close(0.0, 0.0, 0.001):
+        _fail("zero vs zero reported as a difference")
+    if _close(float("nan"), float("nan"), 1e9):
+        _fail("NaN silently matched NaN - a golden file full of NaN would pass")
+
+    if ok:
+        print(
+            "[golden] selfcheck ok: missing file refused, unreasoned re-baseline "
+            "refused, tolerance honoured, new key caught, NaN never matches"
+        )
+    return ok
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or "--selfcheck" in argv:
+        return 0 if selfcheck() else 1
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        return 0
+    print(
+        f"[golden] unknown argument(s): {' '.join(argv)}\n"
+        f"golden is a library; its CLI exists to run --selfcheck.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

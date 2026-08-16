@@ -176,3 +176,109 @@ def selfcheck_detector(detector, known_bad, label: str = "detector") -> None:
             f"[{label}] selfcheck failed: the detector found nothing in a "
             f"planted known-bad input. The guard is decoration until fixed."
         )
+
+
+def selfcheck() -> bool:
+    """The ratchet must SHRINK only, and must refuse a vacuous detector.
+
+    Two behaviours carry this module. A baseline that can grow is a
+    to-do list nobody reads; and `selfcheck_detector` must actually raise
+    when handed a detector that finds nothing, or every ratchet built on it
+    is a green light wired to nothing.
+    """
+    import tempfile
+
+    ok = True
+
+    def _fail(msg: str) -> None:
+        nonlocal ok
+        print(f"[ratchet] SELFCHECK FAILED: {msg}")
+        ok = False
+
+    try:
+        selfcheck_detector(lambda s: [], "planted known-bad input", "vacuity")
+        _fail("selfcheck_detector accepted a detector that finds nothing")
+    except RatchetError:
+        pass
+
+    try:
+        selfcheck_detector(lambda s: [1], "planted known-bad input", "working")
+    except RatchetError as exc:
+        _fail(f"selfcheck_detector rejected a working detector: {exc}")
+
+    with tempfile.TemporaryDirectory() as td:
+        counts = Ratchet(Path(td) / "counts.json", "counts")
+        counts.assert_counts_only_shrink({"a.py": 2, "b.py": 1}, update=True)
+
+        try:
+            counts.assert_counts_only_shrink({"a.py": 2, "b.py": 1})
+        except RatchetError as exc:
+            _fail(f"an unchanged count was rejected: {exc}")
+
+        try:
+            counts.assert_counts_only_shrink({"a.py": 3, "b.py": 1})
+            _fail("a GROWING count was accepted - the ratchet does not hold")
+        except RatchetError:
+            pass
+
+        try:
+            counts.assert_counts_only_shrink({"a.py": 2, "b.py": 1, "new.py": 1})
+            _fail("a NEW offending file was accepted")
+        except RatchetError:
+            pass
+
+        # Shrinking must ALSO fail until the baseline is re-recorded: an
+        # improvement nobody banks is a floor quietly given back.
+        try:
+            counts.assert_counts_only_shrink({"a.py": 1, "b.py": 1})
+            _fail("an unbanked improvement passed - the floor was given back")
+        except RatchetError:
+            pass
+
+        listed = Ratchet(Path(td) / "list.json", "list")
+        listed.assert_only_shrinks(["x.py:1", "y.py:2"], update=True)
+
+        try:
+            listed.assert_only_shrinks(["x.py:1", "y.py:2"])
+        except RatchetError as exc:
+            _fail(f"an unchanged violation set was rejected: {exc}")
+
+        try:
+            listed.assert_only_shrinks(["x.py:1", "y.py:2", "z.py:9"])
+            _fail("a NEW violation was accepted")
+        except RatchetError:
+            pass
+
+        try:
+            listed.assert_only_shrinks(["x.py:1"])
+            _fail("a STALE baseline entry passed instead of demanding removal")
+        except RatchetError:
+            pass
+
+    if ok:
+        print(
+            "[ratchet] selfcheck ok: growth refused, new entry refused, unbanked "
+            "shrink refused, stale entry refused, vacuous detector refused"
+        )
+    return ok
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or "--selfcheck" in argv:
+        return 0 if selfcheck() else 1
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        return 0
+    print(
+        f"[ratchet] unknown argument(s): {' '.join(argv)}\n"
+        f"ratchet is a library; its CLI exists to run --selfcheck.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

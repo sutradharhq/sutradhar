@@ -132,4 +132,30 @@ def selfcheck() -> bool:
     ok = len(bad) == 1 and good == [] and len(empty) == 1
     if not ok:
         print(f"[claim-check] SELFCHECK FAILED: bad={bad} good={good} empty={empty}")
+    else:
+        print(
+            "[claim-check] selfcheck ok: ungrounded number caught, grounded "
+            "number passed, empty witness list refuses rather than passes"
+        )
     return ok
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or "--selfcheck" in argv:
+        return 0 if selfcheck() else 1
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        return 0
+    print(
+        f"[claim-check] unknown argument(s): {' '.join(argv)}\n"
+        f"claim_check is a library; its CLI exists to run --selfcheck.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
