@@ -134,8 +134,6 @@ unreachable; a spec can pass vacuously (`not.exist` on deleted selectors,
 catch-all redirects masking dead routes). Measure reachability and effect,
 not string presence.
 
-## 4. AI/LLM (for products that ship model-backed features)
-
 **3.7 An assertion that cannot fail is not a test - and the target must
 exist.** Two failure modes, both of which report green forever:
 
@@ -158,6 +156,8 @@ caught had it been aimed at a route that existed.*
 The general form, worth applying beyond tests: **when a check is cheap to
 satisfy and expensive to verify, prove it can fail before trusting that it
 passed.** That is rule 2.2 aimed at assertions instead of at fixes.
+
+## 4. AI/LLM (for products that ship model-backed features)
 
 **4.1 The model phrases; it never invents.** LLM output is grounded in
 computed values or refuses cleanly. Every generated number is traceable to a
