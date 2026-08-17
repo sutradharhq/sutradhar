@@ -13,6 +13,24 @@ found by operating the system or asserting on its runtime state, not by
 reading code; and almost every expensive defect could have been prevented by
 a one-sentence design-time statement.**
 
+## What this repository is
+
+Sutradhar is a **framework, not a product.** It ships a copy-in toolkit of
+stdlib-only guards, this doctrine, and the agent workflow around them - and it
+ships no runtime and installs nothing. The rules below are portable advice for
+*your* codebase; they are not describing an application that lives here,
+because none does. The only application in this tree is `examples/broken-app/`,
+which exists to be broken at.
+
+This is a commitment, not a description, so it is a gate rather than a
+sentence - a rule that lives only in prose is one this framework does not
+trust itself to keep. `framework_only.py` holds the line: the shipped guards
+import the standard library only, and no dependency manifest may appear in the
+framework surface (`examples/` excepted). The first `import requests` or the
+first `requirements.txt` is the moment the framework starts becoming a
+product, and the gate makes that a deliberate diff instead of a quiet drift.
+Adopters build products with this; the framework itself stays a framework.
+
 ---
 
 ## 1. Prevention (design time, cheaper than any detection)

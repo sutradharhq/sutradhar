@@ -7,6 +7,23 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Framework, not a product - and now a gate says so.** The DOCTRINE preamble
+and README state the commitment plainly: Sutradhar is a copy-in framework with
+no runtime and nothing to install, not a product-harness. Because a promise in
+prose is one this framework tells you not to trust, it is enforced.
+
+- New tool `framework_only.py`: fails the build if any shipped guard in
+  `sutradhar_guards/` imports outside the standard library, or if a dependency
+  manifest (`requirements.txt`, `pyproject.toml`, `package.json`, a lockfile)
+  appears anywhere in the framework surface but `examples/`. Top-level imports
+  only - a lazy `import` inside a function is the deferred-integration escape
+  hatch (envgate carries pytest exactly this way), and the gate found that
+  distinction by flagging envgate on its first run against the real tree.
+- Wired into the repo's own `selftest.yml` (its selfcheck, the real check
+  against this tree, and the 3.9 lane) - the framework holds itself to the
+  line it draws. Selfcheck mutation-verified three ways; stdlib-only, so the
+  gate passes its own check.
+
 **Doctrine 6.6: observability is a provenance gate.** The "Observability
 floor" prose in docs/operations.md is now a numbered rule, and it is
 mechanised. The line it draws, in the maintainer's words: every task

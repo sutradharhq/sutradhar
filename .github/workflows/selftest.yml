@@ -35,6 +35,12 @@ jobs:
           python python/sutradhar_guards/swallow_lint.py --selfcheck
           python python/sutradhar_guards/interpolation_lint.py --selfcheck
           python python/sutradhar_guards/obsgate.py --selfcheck
+          python python/sutradhar_guards/framework_only.py --selfcheck
+      - name: This repo is still a framework, not a product
+        # The guards import stdlib only and no dependency manifest has
+        # appeared outside examples/. The first one to break this turns the
+        # framework into a product, which must be a deliberate diff.
+        run: python python/sutradhar_guards/framework_only.py .
       - name: budget gate (this repo's own declared envelopes)
         # Two things at once: the gate's selfcheck (a planted
         # unenforced budget must be caught) and the real check that
@@ -61,6 +67,7 @@ jobs:
           python3.9 python/sutradhar_guards/budget.py --selfcheck
           python3.9 python/sutradhar_guards/rounds.py --selfcheck
           python3.9 python/sutradhar_guards/obsgate.py --selfcheck
+          python3.9 python/sutradhar_guards/framework_only.py --selfcheck
 
   examples:
     name: The worked example still catches its planted defects

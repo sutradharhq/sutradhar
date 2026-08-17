@@ -11,6 +11,23 @@ It is a complete harness: backend, frontend, operations, and the agent
 workflow itself. Every rule in it was paid for by a real defect on a real
 production-bound codebase. None of it is aspiration.
 
+## Framework, not a product
+
+"Harness" is an overloaded word. Some harnesses are products - an agent
+runtime you install and run. Sutradhar is the other kind: a **framework**. It
+is a copy-in toolkit of stdlib-only guards, a doctrine, and the agent workflow
+around them. There is no runtime, no service, no package to install; the only
+application in the tree is `examples/broken-app/`, which exists to be broken
+at. You bring the product; this holds its threads.
+
+That promise is enforced, not just stated. `framework_only.py` fails the build
+if any shipped guard imports outside the standard library, or if a dependency
+manifest (`requirements.txt`, `pyproject.toml`, `package.json`, a lockfile)
+appears anywhere but `examples/`. The framework distrusts its own good
+intentions the same way it tells you to distrust yours: the first dependency
+would be the moment it started becoming a product, so the gate makes that a
+visible decision instead of a quiet drift.
+
 ## See it catch something first
 
 ```bash
@@ -89,7 +106,8 @@ sutradhar/
 │   │   ├── claim_check.py         Ground every number in LLM-generated text
 │   │   ├── golden.py              Golden-dataset gate with reasoned re-baseline
 │   │   ├── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
-│   │   └── obsgate.py             Observability floor as a provenance gate (6.6)
+│   │   ├── obsgate.py             Observability floor as a provenance gate (6.6)
+│   │   └── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/
 │   ├── cypress/
