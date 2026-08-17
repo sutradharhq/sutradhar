@@ -40,9 +40,12 @@ machine only needs the table:
     ...then the prose the skill asks for: corrected premises, harness
     gotchas, what you ruled out.
 
-`severity` is high/med/low, `status` is fixed/deferred/closed, and `rule` is
-a doctrine id (`2.7`) or `-`. A deferred finding stays in the residual
-register until a later round lists the same id as closed or fixed.
+`severity` is high/med/low, `status` is fixed/deferred/closed/retracted,
+and `rule` is a doctrine id (`2.7`) or `-`. A deferred finding stays in the
+residual register until a later round lists the same id as closed, fixed or
+retracted. `closed` resolves a finding whose save stands; `retracted` marks
+the original finding as WRONG, so it leaves the register AND takes its
+rule-attribution save with it.
 
 ## Provenance, because this tool reports numbers (doctrine 5.1)
 
@@ -64,10 +67,11 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import date as _date
 from pathlib import Path
 
 SEVERITIES = ("high", "med", "low")
-STATUSES = ("fixed", "deferred", "closed")
+STATUSES = ("fixed", "deferred", "closed", "retracted")
 COLUMNS = ("id", "severity", "rule", "found-by", "status", "summary")
 
 _HEADING = re.compile(r"^#\s+Round\s+(\d+)\s*[-–—]\s*(\d{4}-\d{2}-\d{2})\s*$",
@@ -76,6 +80,10 @@ _LENSES = re.compile(r"^Lenses:\s*(.+)$", re.IGNORECASE)
 _DOCTRINE_RULE = re.compile(r"^\*\*(\d+\.\d+)\s")
 # "Thin data" floor: below this many rounds, an attribution claim is noise.
 MIN_ROUNDS_FOR_ATTRIBUTION = 5
+# 8.1 asks for MONTHS of silence, not a quiet week. Round count alone is
+# gameable: six rounds in nine days satisfied the floor above while the
+# rule's own condition had not begun to run. Both floors must clear.
+MIN_SPAN_DAYS_FOR_ATTRIBUTION = 60
 
 
 class RoundError(ValueError):
@@ -103,12 +111,12 @@ class Round:
 
     def count(self, severity: str) -> int:
         return sum(1 for f in self.findings if f.severity == severity
-                   and f.status != "closed")
+                   and f.status not in ("closed", "retracted"))
 
     def new_findings(self) -> list[Finding]:
         """Findings this round surfaced, excluding bookkeeping rows that
-        merely close an earlier deferral."""
-        return [f for f in self.findings if f.status != "closed"]
+        merely close an earlier deferral or retract an earlier finding."""
+        return [f for f in self.findings if f.status not in ("closed", "retracted")]
 
 
 # ── parsing ─────────────────────────────────────────────────────────────────
@@ -241,13 +249,13 @@ def stop_rule(rounds: list[Round]) -> tuple[str, str]:
 
 
 def residual_register(rounds: list[Round]) -> list[Finding]:
-    """Deferred findings never subsequently closed or fixed."""
+    """Deferred findings never subsequently closed, fixed or retracted."""
     open_items: dict[str, Finding] = {}
     for rnd in rounds:
         for f in rnd.findings:
             if f.status == "deferred":
                 open_items[f.id] = f
-            elif f.status in ("closed", "fixed") and f.id in open_items:
+            elif f.status in ("closed", "fixed", "retracted") and f.id in open_items:
                 del open_items[f.id]
     return sorted(open_items.values(), key=lambda f: (f.round, f.id))
 
@@ -262,13 +270,22 @@ def rule_attribution(rounds: list[Round], all_rules: set[str]) -> dict:
     open - and the longer something goes unfixed, the better its rule would
     look. Found this way: round 2 re-listed three of round 1's deferrals and
     inflated 2.2 to five saves and 1.1 to four, of which three were copies.
+
+    A RETRACTED finding is attributed never: a later row with status
+    `retracted` marks the original finding as wrong, and a save paid by a
+    wrong finding is not a save. `closed` resolves a finding whose save
+    stands; `retracted` withdraws finding and save together. Found this way
+    too: a retracted adoption-audit finding left its rule a save that round
+    6 could only ask readers to mentally discount.
     """
+    retracted = {f.id for rnd in rounds for f in rnd.findings
+                 if f.status == "retracted"}
     last_seen: dict[str, int] = {}
     saves: dict[str, int] = {}
     counted: set[str] = set()
     for rnd in rounds:
         for f in rnd.new_findings():
-            if f.rule and f.id not in counted:
+            if f.rule and f.id not in counted and f.id not in retracted:
                 counted.add(f.id)
                 last_seen[f.rule] = max(last_seen.get(f.rule, 0), rnd.number)
                 saves[f.rule] = saves.get(f.rule, 0) + 1
@@ -286,6 +303,20 @@ def _rule_key(rule: str) -> tuple:
         return (int(major), int(minor))
     except ValueError:
         return (99, 99)
+
+
+def _history_span_days(rounds: list[Round]) -> int | None:
+    """Days between the first and last round record, None if unparseable.
+
+    The heading regex guarantees the SHAPE (\\d{4}-\\d{2}-\\d{2}) but not a
+    real calendar date; refusing on None keeps a malformed date from
+    silently widening the span to "long enough"."""
+    try:
+        first = _date.fromisoformat(rounds[0].date)
+        last = _date.fromisoformat(rounds[-1].date)
+    except ValueError:
+        return None
+    return (last - first).days
 
 
 # ── the measured half ───────────────────────────────────────────────────────
@@ -345,11 +376,21 @@ def report(rounds: list[Round], all_rules: set[str], floors: dict | None = None)
     else:
         out.append("    no finding cites a doctrine rule yet - fill the `rule` "
                    "column and this becomes answerable")
+    span_days = _history_span_days(rounds)
     if len(rounds) < MIN_ROUNDS_FOR_ATTRIBUTION:
         out.append(
             f"    deletion candidates: NOT REPORTED. {len(rounds)} round(s) is "
             f"too thin to conclude a rule earns nothing; 8.1 asks for months of "
             f"silence, not a quiet week. Needs {MIN_ROUNDS_FOR_ATTRIBUTION}+."
+        )
+    elif span_days is None or span_days < MIN_SPAN_DAYS_FOR_ATTRIBUTION:
+        shown = "unparseable dates" if span_days is None else f"{span_days} day(s)"
+        out.append(
+            f"    deletion candidates: NOT REPORTED. {len(rounds)} rounds "
+            f"spanning {shown} clears the round floor but not the clock: 8.1 "
+            f"asks for months of silence, and a burst of rounds in one week "
+            f"is a busy week, not a silent rule. Needs "
+            f"{MIN_SPAN_DAYS_FOR_ATTRIBUTION}+ days of history."
         )
     else:
         never = attribution["never_cited"]
@@ -375,7 +416,7 @@ def report(rounds: list[Round], all_rules: set[str], floors: dict | None = None)
 
 # ── selfcheck ───────────────────────────────────────────────────────────────
 
-ROUND_TEMPLATE = """# Round {n} - 2026-0{n}-01
+ROUND_TEMPLATE = """# Round {n} - {date}
 
 Lenses: authz, scale
 
@@ -385,9 +426,10 @@ Lenses: authz, scale
 """
 
 
-def _plant(tmp: Path, n: int, rows: list[str]) -> None:
+def _plant(tmp: Path, n: int, rows: list[str], date: str | None = None) -> None:
     (tmp / f"round-{n:03d}.md").write_text(
-        ROUND_TEMPLATE.format(n=n, rows="\n".join(rows))
+        ROUND_TEMPLATE.format(n=n, date=date or f"2026-0{n}-01",
+                              rows="\n".join(rows))
     )
 
 
@@ -456,6 +498,42 @@ def _selfcheck_body() -> bool:
                       file=sys.stderr)
                 ok = False
 
+        # A retracted finding must leave the register AND lose its save -
+        # and its bookkeeping row must not ride the severity counts.
+        with tempfile.TemporaryDirectory() as retracted_s:
+            rdir = Path(retracted_s)
+            _plant(rdir, 1, ["| R1-1 | med | 2.6 | audit | deferred | wrong count |"])
+            _plant(rdir, 2, ["| R1-1 | med | 2.6 | - | retracted | the count was the auditor's bug |"])
+            rr = load_rounds(rdir)
+            if rule_attribution(rr, {"2.6"})["saves"]:
+                print("[rounds] SELFCHECK FAILED: a retracted finding kept its "
+                      "save; a save paid by a wrong finding is not a save",
+                      file=sys.stderr)
+                ok = False
+            if residual_register(rr):
+                print("[rounds] SELFCHECK FAILED: a retracted finding stayed in "
+                      "the residual register", file=sys.stderr)
+                ok = False
+            if rr[1].count("med") != 0:
+                print("[rounds] SELFCHECK FAILED: a retraction bookkeeping row "
+                      "rode the severity count", file=sys.stderr)
+                ok = False
+
+        # Enough rounds inside a short span must still refuse deletion
+        # candidates: 8.1 asks for months, and a burst of rounds in one
+        # week satisfies the round floor without the rule's condition.
+        with tempfile.TemporaryDirectory() as span_s:
+            sdir = Path(span_s)
+            for n in range(1, MIN_ROUNDS_FOR_ATTRIBUTION + 2):
+                _plant(sdir, n, [], date=f"2026-06-{n:02d}")
+            burst = report(load_rounds(sdir), {"9.9"})
+            if "NOT REPORTED" not in burst or "9.9" in burst:
+                print(f"[rounds] SELFCHECK FAILED: {MIN_ROUNDS_FOR_ATTRIBUTION + 1} "
+                      f"rounds in six days named deletion candidates; the "
+                      f"{MIN_SPAN_DAYS_FOR_ATTRIBUTION}-day clock never ran",
+                      file=sys.stderr)
+                ok = False
+
         # Attribution must refuse to name deletion candidates on thin data.
         # Both sides of the threshold are checked: a refusal that never lifts
         # is as useless as one that never fires.
@@ -490,11 +568,11 @@ def _selfcheck_body() -> bool:
         malformed = [
             ("no heading", "Lenses: x\n\n| id | severity | rule | found-by | status | summary |\n|---|---|---|---|---|---|\n"),
             ("no findings table", "# Round 9 - 2026-01-01\n\nsome prose\n"),
-            ("bad severity", ROUND_TEMPLATE.format(n=9, rows="| R9-1 | critical | 2.7 | x | fixed | y |")),
-            ("bad status", ROUND_TEMPLATE.format(n=9, rows="| R9-1 | high | 2.7 | x | pending | y |")),
-            ("wrong cell count", ROUND_TEMPLATE.format(n=9, rows="| R9-1 | high | 2.7 |")),
+            ("bad severity", ROUND_TEMPLATE.format(n=9, date="2026-09-01", rows="| R9-1 | critical | 2.7 | x | fixed | y |")),
+            ("bad status", ROUND_TEMPLATE.format(n=9, date="2026-09-01", rows="| R9-1 | high | 2.7 | x | pending | y |")),
+            ("wrong cell count", ROUND_TEMPLATE.format(n=9, date="2026-09-01", rows="| R9-1 | high | 2.7 |")),
             ("duplicate id in round", ROUND_TEMPLATE.format(
-                n=9, rows="| R9-1 | high | 2.7 | x | fixed | a |\n| R9-1 | low | 2.7 | x | fixed | b |")),
+                n=9, date="2026-09-01", rows="| R9-1 | high | 2.7 | x | fixed | a |\n| R9-1 | low | 2.7 | x | fixed | b |")),
         ]
         for label, text_bad in malformed:
             try:
@@ -506,7 +584,7 @@ def _selfcheck_body() -> bool:
                 pass
 
         # A duplicated round number would silently reorder history.
-        (tmp / "dupe.md").write_text(ROUND_TEMPLATE.format(n=1, rows=""))
+        (tmp / "dupe.md").write_text(ROUND_TEMPLATE.format(n=1, date="2026-01-01", rows=""))
         try:
             load_rounds(tmp)
             print("[rounds] SELFCHECK FAILED: two records claimed the same round",

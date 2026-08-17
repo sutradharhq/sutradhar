@@ -187,11 +187,34 @@ def test_attribution_refuses_deletion_candidates_on_thin_data(tmp_path):
 
 
 def test_the_refusal_lifts_at_the_threshold(tmp_path):
-    """A refusal that never lifts is as useless as one that never fires."""
+    """A refusal that never lifts is as useless as one that never fires.
+    Needs both floors cleared: enough rounds AND months of span."""
     for n in range(1, MIN_ROUNDS_FOR_ATTRIBUTION + 1):
-        _plant(tmp_path, n)
+        _plant(tmp_path, n, date=f"2026-0{n}-01")
     text = report(load_rounds(tmp_path), {"9.9"})
     assert "NOT REPORTED" not in text and "9.9" in text
+
+
+def test_deletion_candidates_need_a_time_span_not_just_rounds(tmp_path):
+    """Six rounds in nine days cleared the round floor and named 25 deletion
+    candidates while 8.1's own condition - months of silence - had not begun
+    to run. A burst of rounds is a busy week, not a silent rule."""
+    for n in range(1, MIN_ROUNDS_FOR_ATTRIBUTION + 2):
+        _plant(tmp_path, n, date=f"2026-06-{n:02d}")
+    text = report(load_rounds(tmp_path), {"9.9"})
+    assert "NOT REPORTED" in text and "9.9" not in text
+
+
+def test_a_retracted_finding_loses_its_save_and_leaves_the_register(tmp_path):
+    """closed resolves a finding whose save stands; retracted marks the
+    finding itself as wrong, so the save goes with it. Round 6 could only
+    ask readers to mentally discount a retracted finding's save."""
+    _plant(tmp_path, 1, "| R1-1 | med | 2.6 | audit | deferred | wrong count |\n")
+    _plant(tmp_path, 2, "| R1-1 | med | 2.6 | - | retracted | auditor's bug |\n")
+    rounds = load_rounds(tmp_path)
+    assert rule_attribution(rounds, {"2.6"})["saves"] == {}
+    assert residual_register(rounds) == []
+    assert rounds[1].count("med") == 0  # bookkeeping, not a new finding
 
 
 def test_doctrine_ids_parse_from_the_real_doctrine():
