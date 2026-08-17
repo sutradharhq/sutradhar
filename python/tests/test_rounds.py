@@ -163,6 +163,16 @@ def test_attribution_counts_saves_and_finds_uncited_rules(tmp_path):
     assert a["never_cited"] == ["5.2"]
 
 
+def test_a_relisted_deferral_is_attributed_once(tmp_path):
+    """Round 2 re-listing round 1's open deferral is bookkeeping, not a save.
+    Counting it twice would make a rule look better the longer its finding
+    stays unfixed - and did, in this repo's own rounds 1 and 2."""
+    row = "| R1-1 | med | 2.6 | scale | deferred | uncapped sweep |\n"
+    _plant(tmp_path, 1, row)
+    _plant(tmp_path, 2, row)
+    assert rule_attribution(load_rounds(tmp_path), {"2.6"})["saves"] == {"2.6": 1}
+
+
 def test_a_mistyped_rule_id_is_surfaced(tmp_path):
     _plant(tmp_path, 1, "| R1-1 | high | 27 | x | fixed | y |\n")
     a = rule_attribution(load_rounds(tmp_path), {"2.7"})

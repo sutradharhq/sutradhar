@@ -253,12 +253,23 @@ def residual_register(rounds: list[Round]) -> list[Finding]:
 
 
 def rule_attribution(rounds: list[Round], all_rules: set[str]) -> dict:
-    """Which doctrine rules can cite a save, and when (doctrine 8.1)."""
+    """Which doctrine rules can cite a save, and when (doctrine 8.1).
+
+    A finding is attributed ONCE, on its first appearance. Later rows with
+    the same id are bookkeeping: `residual_register` already carries open
+    deferrals forward, so a round that also re-lists them for readability
+    would otherwise pay its rule a fresh save every round the deferral stays
+    open - and the longer something goes unfixed, the better its rule would
+    look. Found this way: round 2 re-listed three of round 1's deferrals and
+    inflated 2.2 to five saves and 1.1 to four, of which three were copies.
+    """
     last_seen: dict[str, int] = {}
     saves: dict[str, int] = {}
+    counted: set[str] = set()
     for rnd in rounds:
         for f in rnd.new_findings():
-            if f.rule:
+            if f.rule and f.id not in counted:
+                counted.add(f.id)
                 last_seen[f.rule] = max(last_seen.get(f.rule, 0), rnd.number)
                 saves[f.rule] = saves.get(f.rule, 0) + 1
     return {
@@ -427,6 +438,23 @@ def _selfcheck_body() -> bool:
             print(f"[rounds] SELFCHECK FAILED: residual register held "
                   f"{[f.id for f in register]}, expected ['R1-2']", file=sys.stderr)
             ok = False
+
+        # A re-listed deferral must not pay its rule a second save. Its own
+        # directory: load_rounds walks recursively and would read these as
+        # duplicate round numbers of the history above.
+        with tempfile.TemporaryDirectory() as relisted_s:
+            relisted = Path(relisted_s)
+            row = "| R1-1 | med | 2.6 | scale | deferred | uncapped sweep |"
+            _plant(relisted, 1, [row])
+            _plant(relisted, 2, [row])          # round 2 re-lists it, open still
+            saves = rule_attribution(load_rounds(relisted), {"2.6"})["saves"]
+            if saves.get("2.6") != 1:
+                print(f"[rounds] SELFCHECK FAILED: one deferral listed in two "
+                      f"rounds paid rule 2.6 {saves.get('2.6')} saves. A "
+                      f"re-listed deferral is bookkeeping; counting it again "
+                      f"makes a rule look better the longer it goes unfixed",
+                      file=sys.stderr)
+                ok = False
 
         # Attribution must refuse to name deletion candidates on thin data.
         # Both sides of the threshold are checked: a refusal that never lifts
