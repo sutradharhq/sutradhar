@@ -28,6 +28,10 @@ intentions the same way it tells you to distrust yours: the first dependency
 would be the moment it started becoming a product, so the gate makes that a
 visible decision instead of a quiet drift.
 
+For how this compares to an agent runtime like DeepSeek Harness, see
+[docs/comparisons/deepseek-harness.md](docs/comparisons/deepseek-harness.md) -
+short version: different layers, they compose.
+
 ## See it catch something first
 
 ```bash
