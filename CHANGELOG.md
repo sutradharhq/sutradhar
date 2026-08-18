@@ -5,7 +5,18 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
-## Unreleased
+## v0.4.0 - 2026-08-18
+
+**Public release.** Sutradhar is now open source. Added the community surface a
+copy-in framework needs: `CONTRIBUTING.md`, `SECURITY.md` (the zero-dependency,
+nothing-to-install supply-chain posture stated as a feature), issue templates -
+including an *adoption report*, because field evidence from a codebase that is
+not ours is the framework's binding constraint (doctrine 8.4) - a PR template
+that is the doctrine's own checklist, and
+[docs/design/scope-framework-only.md](docs/design/scope-framework-only.md)
+stating the framework/product line the gate already enforces. Rounds 6-8 (the
+outside-evidence cross-read, the multi-thread survey, and the deletion pass)
+land in this release; contributing repositories are referred to anonymously.
 
 **Framework, not a product - and now a gate says so.** The DOCTRINE preamble
 and README state the commitment plainly: Sutradhar is a copy-in framework with

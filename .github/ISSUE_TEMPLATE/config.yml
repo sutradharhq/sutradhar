@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & ideas
+    url: https://github.com/sutradharhq/sutradhar/discussions
+    about: Open-ended questions, ideas, and proposals for new doctrine rules go in Discussions. A new rule needs an incident behind it (doctrine 8.1) — bring the scar.
