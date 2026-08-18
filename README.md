@@ -60,11 +60,10 @@ things:
    sentence.** "This must survive 200,000 rows" costs nothing to write and
    everything to skip.
 
-Tools like [Reticle](https://github.com/reticlehq/reticle) proved the value
-of the inner loop: let the agent assert on the running app's state instead
-of eyeballing screenshots. Sutradhar takes that idea and completes the
-picture. The inner loop is one of three loops, and a harness that only has
-one of them leaks defects through the other two.
+The value of the inner loop is well established: let the agent assert on the
+running app's state instead of eyeballing screenshots. Sutradhar takes that
+idea and completes the picture. The inner loop is one of three loops, and a
+harness that only has one of them leaks defects through the other two.
 
 ## The three loops
 
@@ -266,17 +265,6 @@ def test_fleet_sweep_at_design_scale():
 Raising the design figure automatically makes the test harder. Lowering it
 is a visible diff in the note, which is exactly where that argument belongs
 - rather than a quietly weakened number in a test file nobody reads.
-
-## Relationship to Reticle
-
-[Reticle](https://github.com/reticlehq/reticle) is a dev-only MCP tool for
-runtime-state assertions in the frontend inner loop, and it is good at that.
-Sutradhar is not a fork or a competitor at that layer; use any
-runtime-observation tool you like inside the inner loop (browser MCP
-tooling, CDP, Reticle itself). What Sutradhar adds is everything around it:
-the outer regression loop, the backend equivalents, the operational drills,
-the multi-agent workflow, and the doctrine that ties it together. The
-frontend playbook explains exactly where an inner-loop tool slots in.
 
 ## Provenance of this repo's own claims
 

@@ -132,7 +132,7 @@ catches the page-crashes-to-boundary class that review never sees.
 **3.3 Assert runtime state, not pixels, in the inner loop.** While building,
 verify against the running app's actual state: network responses, store
 values, console. Use runtime observation (browser devtools protocol, MCP
-browser tools, Reticle-class tools). Pixels lie in both directions.
+browser tools). Pixels lie in both directions.
 
 **3.4 Keep paint checks in the outer loop.** Inside-the-app observation
 cannot see pure paint defects (overprints, occlusion). The committed e2e

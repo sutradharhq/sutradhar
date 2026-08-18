@@ -20,8 +20,8 @@ server. The discipline:
   [runtime probe](../js/probe/README.md) - install it in the dev build,
   and any agent with `curl` can read the live console, network log, and
   exposed store state (an MCP adapter is included). Browser devtools
-  protocol tooling or [Reticle](https://github.com/reticlehq/reticle)
-  work here too; the discipline matters more than the tool.
+  protocol tooling and MCP browser tools work here too; the discipline
+  matters more than the tool.
 - A screenshot that "looks right" proves nothing in either direction: the
   data can be hardcoded, the control can be dead, the store can be stale.
   Pixels lie both ways.

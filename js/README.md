@@ -32,7 +32,7 @@ configureUiGuards({
 
 While BUILDING, do not use Cypress as your feedback loop; it is too slow
 and too coarse. Assert on the running app's actual runtime state through
-browser devtools protocol / MCP browser tooling / Reticle-class tools:
+browser devtools protocol / MCP browser tooling:
 network responses, store values, console output. See
 [docs/frontend.md](../docs/frontend.md) for the full two-loop playbook.
 
