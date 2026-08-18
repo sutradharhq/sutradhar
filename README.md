@@ -280,17 +280,19 @@ frontend playbook explains exactly where an inner-loop tool slots in.
 
 ## Provenance of this repo's own claims
 
-Practicing what we preach (doctrine 5.1): the statistics quoted here
+Practicing what we preach (doctrine 5.1): the specific ratios quoted here
 ("~37 ratchet tests produced two thirds of test-driven discoveries",
 "~1,400 point tests produced three", "five UI defects found by a human,
-zero by the suite") are **measured from one production build record** -
-ours: a production platform, 25+ robustness rounds, ~1,500
-tests, built largely by agents over hundreds of sessions. They are honest
-counts, not a controlled study, and one codebase is a sample size of one.
-The *scar stories* in DOCTRINE.md are real incidents, genericized only
-enough to remove domain detail. Treat the numbers as strong evidence from
-a single deployment, and expect your ratios to differ; the doctrine's own
-rule 8.1 says to keep only what your record confirms.
+zero by the suite") are **measured counts from one deep production build
+record** - 25+ robustness rounds, ~1,500 tests, built largely by agents over
+hundreds of sessions - not a controlled study. The doctrine's rules and scars,
+though, were distilled from a **family of independent agent-built codebases**
+across different stacks and domains, recorded and anonymised in
+[docs/rounds/](docs/rounds/); do not read the numbers above as the framework's
+whole evidence base. The *scar stories* in DOCTRINE.md are real incidents,
+genericised only enough to remove domain detail. Treat the numbers as strong
+evidence from real deployments, expect your ratios to differ, and hold the
+framework to its own rule 8.1: keep only what your record confirms.
 
 ## Versioning
 
