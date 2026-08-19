@@ -35,6 +35,26 @@ missed_it() {
   printf "  \033[31m%d. MISSED\033[0m  %s\n" "$step" "$1"
 }
 
+# Preflight: pytest is the demo's one requirement beyond python3. A missing
+# dependency must state itself up front (doctrine 2.4) - without this check,
+# defect 7 reports MISSED and the green-suite opening prints an import error,
+# which reads as a broken framework instead of a missing test runner.
+if ! "$PY" -c "import pytest" >/dev/null 2>&1; then
+  echo
+  bold "One thing is missing: pytest."
+  echo
+  dim "  It is this demo's only requirement beyond python3 - the broken app's"
+  dim "  (green) test suite and the guard that proves tests can fail both run"
+  dim "  under it. One command:"
+  echo
+  echo "      $PY -m pip install pytest"
+  echo
+  dim "  Then run this script again. There is nothing else to install -"
+  dim "  Sutradhar itself is copy-in and dependency-free."
+  echo
+  exit 2
+fi
+
 echo
 bold "── First, the app's own test suite ──────────────────────────────────"
 echo

@@ -39,7 +39,8 @@ git clone https://github.com/sutradharhq/sutradhar.git
 cd sutradhar && bash examples/run-the-guards.sh
 ```
 
-Ten seconds, no install. A small app whose test suite is green, and seven
+Ten seconds, no install beyond `pytest` (the demo's one requirement; it
+tells you if it's missing). A small app whose test suite is green, and seven
 real defects surfacing out of it: an outage swallowed into an empty dict, a
 model inventing the numbers in a customer summary, a billing test that has
 never run in any environment, a test that cannot fail. Then read on for why
@@ -303,3 +304,9 @@ thing the licence asks (section 4) is that if you **pass it on**, you keep
 the copyright headers on the files you copied, the `LICENSE`, and the
 [`NOTICE`](NOTICE). `bootstrap.sh` copies the notice into your repo so this
 takes no effort; it is a small ask for a framework given away whole.
+
+Built and maintained by [Varun Mundra](https://github.com/varunmundra5-stack),
+distilled from a family of production builds written largely by AI agents.
+Citable via [`CITATION.cff`](CITATION.cff); questions and adoption reports in
+[Discussions](https://github.com/sutradharhq/sutradhar/discussions) and
+[Issues](https://github.com/sutradharhq/sutradhar/issues).
