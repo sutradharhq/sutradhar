@@ -5,6 +5,26 @@ APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
 upgrade by diffing against the tag they took.
 
+## Unreleased
+
+**First adoption report, and its fixes** ([#1](https://github.com/sutradharhq/sutradhar/issues/1)).
+A repository that is not this one ran the full bootstrap and the gates, and
+the kit itself produced the first red:
+
+- `budget.py` no longer reports the shipped `docs/design/TEMPLATE.md` as a
+  declared-but-unenforced budget, so a fresh bootstrap's first gate run is
+  green instead of a false red. A placeholder id in any *other* note is now
+  **refused** rather than skipped - a half-filled copy has numbers no test can
+  find, which is the decoration the gate exists to catch. Both directions
+  mutation-verified.
+- `bootstrap.sh --layers python,frontend,probe,ci,agent,docs` (default: all).
+  A backend-only repo no longer receives a cypress suite it will never run and
+  a CI job that fails on a missing JS lockfile. An unknown layer is refused,
+  never ignored. This is the deferred v0.3 roadmap item, unblocked by field
+  evidence rather than guessed demand.
+- The python layer now creates `docs/rounds/`, so the CI template's
+  `rounds --check` has a directory to read on an adopter's first push.
+
 ## v0.4.0 - 2026-08-18
 
 **Public release.** Sutradhar is now open source. Added the community surface a

@@ -68,6 +68,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MARKER = "sutradhar_budget"
+# The shipped fill-in-the-blanks note. Skipped by name: it is reference
+# material, not a design note, and its placeholder frontmatter would report as
+# an unenforced budget on every fresh bootstrap.
+TEMPLATE_NAME = "TEMPLATE.md"
+
+
+def _is_placeholder(ident: str) -> bool:
+    """True for an id still wearing the template's angle brackets."""
+    return "<" in ident or ">" in ident
 
 # Flat scalars only. A design note is a contract, so the parser REFUSES
 # what it does not understand rather than guessing a meaning for it - a
@@ -169,11 +178,25 @@ def budget_from_frontmatter(data: dict, source: str = "") -> Budget:
 
 
 def load_budgets(root: str | Path) -> dict[str, Budget]:
-    """Every design note under `root` that declares a budget, by id."""
+    """Every design note under `root` that declares a budget, by id.
+
+    `TEMPLATE.md` is skipped by name: the shipped fill-in-the-blanks note is
+    reference material, not a design note, and its placeholder frontmatter
+    would otherwise report as an unenforced budget on every fresh bootstrap -
+    a false red on an adopter's very first gate run, which is the fastest way
+    to teach someone that a tool cries wolf.
+
+    A placeholder id in any OTHER note is refused rather than skipped. Someone
+    who copied the template and has not filled it in has a real design note
+    with a fake id; silently passing over it would leave their declared
+    numbers unenforced, which is the decoration this gate exists to catch.
+    """
     found: dict[str, Budget] = {}
     root = Path(root)
     files = [root] if root.is_file() else sorted(root.rglob("*.md"))
     for path in files:
+        if path.name == TEMPLATE_NAME:
+            continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if MARKER not in text:
             continue
@@ -181,6 +204,13 @@ def load_budgets(root: str | Path) -> dict[str, Budget]:
         if not data or MARKER not in data:
             continue
         b = budget_from_frontmatter(data, source=str(path))
+        if _is_placeholder(b.id):
+            raise BudgetError(
+                f"{path}: budget id {b.id!r} is still the template's "
+                f"placeholder. Give it a real id or delete the frontmatter - "
+                f"a note that declares numbers under a placeholder name has "
+                f"numbers no test can find."
+            )
         if b.id in found:
             raise BudgetError(
                 f"budget id {b.id!r} declared twice: {found[b.id].source} and "
@@ -395,10 +425,42 @@ def _selfcheck_body() -> bool:
             except BudgetError:
                 pass
             note.unlink()
+        # The shipped template must not report as an unenforced budget, and a
+        # copy of it that kept the placeholder id must not pass silently.
+        # Both directions, because skipping too much and skipping too little
+        # are different failures.
+        tpl_dir = Path(tmp) / "tpl"
+        tpl_dir.mkdir()
+        placeholder = (
+            "---\nsutradhar_budget: <short-id>\nn: 200000\n---\n# note\n"
+        )
+        (tpl_dir / TEMPLATE_NAME).write_text(placeholder)
+        try:
+            if load_budgets(tpl_dir):
+                print("[budget] SELFCHECK FAILED: the shipped TEMPLATE.md was "
+                      "read as a real budget; a fresh bootstrap would open red",
+                      file=sys.stderr)
+                ok = False
+        except BudgetError as exc:
+            print(f"[budget] SELFCHECK FAILED: TEMPLATE.md raised instead of "
+                  f"being skipped: {exc}", file=sys.stderr)
+            ok = False
+
+        (tpl_dir / "my-feature.md").write_text(placeholder)
+        try:
+            load_budgets(tpl_dir)
+            print("[budget] SELFCHECK FAILED: a real note kept the template's "
+                  "placeholder id and was accepted; its numbers would be "
+                  "unenforceable", file=sys.stderr)
+            ok = False
+        except BudgetError:
+            pass
+
     if ok:
         print(
             "[budget] selfcheck ok: unenforced budget caught, latency ceiling "
-            "enforced, empty envelope refused, malformed note refused"
+            "enforced, empty envelope refused, malformed note refused, "
+            "template skipped, placeholder id refused"
         )
     return ok
 
