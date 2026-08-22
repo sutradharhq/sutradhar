@@ -39,6 +39,28 @@ missed_it() {
 # dependency must state itself up front (doctrine 2.4) - without this check,
 # defect 7 reports MISSED and the green-suite opening prints an import error,
 # which reads as a broken framework instead of a missing test runner.
+# Two different failures, told apart. An error branch that cannot say WHOSE
+# failure it is will confidently report the wrong one: a bad --PYTHON path
+# used to come out as "pytest is missing", sending the reader after a package
+# when the interpreter was the problem.
+if ! "$PY" -c "" >/dev/null 2>&1; then
+  echo
+  bold "Cannot run Python: $PY"
+  echo
+  dim "  That interpreter did not start - so nothing here has been checked yet."
+  dim "  This is not a problem with pytest or with the guards."
+  echo
+  if [ -n "${PYTHON:-}" ]; then
+    dim "  You set PYTHON=$PYTHON . Check that path, or unset it to use python3:"
+    echo
+    echo "      unset PYTHON && bash examples/run-the-guards.sh"
+  else
+    dim "  Install Python 3.9+ (python3 was not runnable), then run this again."
+  fi
+  echo
+  exit 2
+fi
+
 if ! "$PY" -c "import pytest" >/dev/null 2>&1; then
   echo
   bold "One thing is missing: pytest."

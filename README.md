@@ -34,6 +34,8 @@ short version: different layers, they compose.
 
 ## See it catch something first
 
+![Seven real defects surfacing from a green test suite](docs/media/demo.gif)
+
 ```bash
 git clone https://github.com/sutradharhq/sutradhar.git
 cd sutradhar && bash examples/run-the-guards.sh
