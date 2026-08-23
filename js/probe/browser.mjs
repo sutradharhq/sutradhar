@@ -12,6 +12,7 @@
  *   if (import.meta.env.DEV) {
  *     const { installProbe } = await import("./probe/browser.mjs");
  *     const probe = installProbe({
+ *       token: "…the token the bridge printed when it started…",
  *       expose: {
  *         route: () => window.location.pathname,
  *         cart: () => useCartStore.getState(),   // any getter you want
@@ -22,28 +23,59 @@
  *   }
  *
  * Security posture, stated plainly: this is a development tool in the same
- * trust class as an open devtools port. The bridge binds 127.0.0.1 and the
+ * trust class as an open devtools port. The bridge binds 127.0.0.1 only,
+ * answers only with the shared token, sends no CORS permissions, and the
  * probe should never be installed in a production build - the import.meta
- * guard above is the mechanism, and the installer refuses non-local
- * bridges as a second line.
+ * guard above is the mechanism, and the installer refuses non-loopback
+ * bridges (parsed with `new URL`, so `http://127.0.0.1@evil.example` does
+ * not pass) as a second line.
  */
 import { ProbeCore } from "./core.mjs";
 
+const LOOPBACK_HOSTNAMES = ["127.0.0.1", "localhost", "[::1]", "::1"];
+
 export function installProbe({
   serverUrl = "http://127.0.0.1:7071",
+  token,
   allowEval = false,
   expose = {},
 } = {}) {
-  if (!/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(serverUrl + "/")) {
+  let parsed;
+  try {
+    parsed = new URL(serverUrl);
+  } catch {
+    throw new Error(
+      `[sutradhar-probe] bridge URL "${serverUrl}" does not parse - ` +
+      `pass the origin the bridge printed (e.g. http://127.0.0.1:7071)`,
+    );
+  }
+  if (!LOOPBACK_HOSTNAMES.includes(parsed.hostname) || !/^https?:$/.test(parsed.protocol)) {
     throw new Error(
       `[sutradhar-probe] refusing non-local bridge "${serverUrl}" - ` +
       `the probe ships page state and must never leave the machine`,
     );
   }
+  if (!token || typeof token !== "string") {
+    throw new Error(
+      `[sutradhar-probe] missing bridge token - pass the token the bridge ` +
+      `printed as installProbe({ token }) (design note: docs/design/probe-auth.md)`,
+    );
+  }
+  // A page that is itself non-local (a preview deploy) reaches the
+  // developer's own machine when its JS calls 127.0.0.1 - allowed, but it
+  // states itself where the developer is actually looking. Sent natively,
+  // before console patching below, so the probe never records its own notice.
+  if (!LOOPBACK_HOSTNAMES.includes(window.location.hostname)) {
+    window.console.warn(
+      `[sutradhar-probe] active on a non-local page (${window.location.hostname}) - ` +
+      `page state will be sent to the local bridge; do not ship this build`,
+    );
+  }
 
   const core = new ProbeCore({
-    serverUrl,
+    serverUrl: parsed.origin,
     fetchImpl: (...a) => nativeFetch(...a),
+    token,
     allowEval,
     // Indirect eval evaluates in global scope, which is what an agent
     // asking "window.__store.cart.length" expects.

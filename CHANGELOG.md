@@ -7,6 +7,40 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Probe bridge hardening - BREAKING for anyone scripting the endpoints**
+(round 10; design note: [docs/design/probe-auth.md](docs/design/probe-auth.md)).
+An external adversarial review demonstrated that any webpage open in the
+developer's browser could fully compromise the loopback bridge:
+`access-control-allow-origin: *` made every response readable, preflight-less
+POSTs reached handlers, `/probe/poll` let a hostile page impersonate the
+probe outright, and `/probe/result` let it answer agent queries with
+arbitrary payload shapes - a fabrication hole in exactly the channel whose
+contract is "never a fabricated value". Four independent layers now hold it:
+
+- **Shared token required on every endpoint** (`x-sutradhar-probe-token`),
+  timing-safe compared, generated at startup and printed if not supplied
+  (`--token` / `SUTRADHAR_PROBE_TOKEN` also work). Every curl example,
+  the MCP adapter, and the installer carry it. *This changes every probe
+  HTTP contract* - hence the breaking marker per the versioning policy.
+- **No CORS headers are sent at all** - no legitimate client is a browser;
+  cross-origin reads die, and the custom header kills the simple-request
+  bypass. A class ratchet (`test_probe_source_guards.py`) fails the build
+  if any CORS permission ever reappears in `js/`.
+- **Host check**: non-loopback Host headers (DNS rebinding) are a 403.
+- **Payload validation**: malformed polls/results are 400s; result
+  waiters receive only validated fields, so nothing else can shape what
+  the agent reads. Request bodies are capped (413 above 5 MB).
+- Installer parses bridge URLs with `new URL()` - the old regex accepted
+  `http://127.0.0.1@evil.example`, shipping page state off-machine - and
+  refuses to install without the token.
+
+Also fixed en passant, found by writing the failure-path tests: a query
+that timed out stayed in the delivery queue forever, to be answered into
+the void by the next page that polled. All refusal paths are first-class
+selftest cases (25 total), and all three guards were mutation-verified:
+disabling the token gate, reintroducing the CORS header, and reverting
+the URL parsing each turn a suite red.
+
 **First adoption report, and its fixes** ([#1](https://github.com/sutradharhq/sutradhar/issues/1)).
 A repository that is not this one ran the full bootstrap and the gates, and
 the kit itself produced the first red:

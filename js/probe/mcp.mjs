@@ -18,6 +18,20 @@
 import readline from "node:readline";
 
 const BRIDGE = process.env.SUTRADHAR_PROBE_URL || "http://127.0.0.1:7071";
+// Same resolution order as the bridge binary: env var, or the token file
+// the bridge's stdout told you to paste into your shell profile.
+const TOKEN =
+  process.env.SUTRADHAR_PROBE_TOKEN ||
+  (() => {
+    console.error(
+      "[sutradhar-probe] SUTRADHAR_PROBE_TOKEN is not set - the bridge refuses untokened requests. Export the token it printed at startup.",
+    );
+    return "";
+  })();
+
+function bridgeHeaders(extra = {}) {
+  return { "x-sutradhar-probe-token": TOKEN, ...extra };
+}
 
 const TOOLS = [
   {
@@ -72,12 +86,12 @@ const TOOLS = [
 ];
 
 async function callBridge(name, args) {
-  const get = (p) => fetch(`${BRIDGE}${p}`).then((r) => r.json());
+  const get = (p) => fetch(`${BRIDGE}${p}`, { headers: bridgeHeaders() }).then((r) => r.json());
   switch (name) {
     case "probe_status":
       return get("/status");
     case "probe_console":
-      return get(`/console${args?.level ? `?level=${args.level}` : ""}`);
+      return get(`/console${args?.level ? `?level=${encodeURIComponent(args.level)}` : ""}`);
     case "probe_network":
       return get(`/network${args?.match ? `?match=${encodeURIComponent(args.match)}` : ""}`);
     case "probe_state":
@@ -85,11 +99,11 @@ async function callBridge(name, args) {
     case "probe_eval":
       return fetch(`${BRIDGE}/eval`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: bridgeHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({ expr: args.expr }),
       }).then((r) => r.json());
     case "probe_clear":
-      return fetch(`${BRIDGE}/clear`, { method: "POST" }).then((r) => r.json());
+      return fetch(`${BRIDGE}/clear`, { method: "POST", headers: bridgeHeaders() }).then((r) => r.json());
     default:
       throw new Error(`unknown tool ${name}`);
   }

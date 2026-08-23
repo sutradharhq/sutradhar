@@ -17,7 +17,10 @@
  *     poll, and answer state/eval queries the bridge relays from an agent
  *
  * Transport is deliberately boring: HTTP long-polling with plain fetch.
- * No WebSocket, no deps, nothing to build.
+ * No WebSocket, no deps, nothing to build. Every request carries the
+ * bridge's shared token (design note: docs/design/probe-auth.md) - the
+ * custom header is what makes a hostile webpage's request die in
+ * preflight, so it is sent even though the page is already local.
  */
 
 export class ProbeCore {
@@ -25,13 +28,15 @@ export class ProbeCore {
    * @param {object} opts
    * @param {string} opts.serverUrl        bridge origin, e.g. http://127.0.0.1:7071
    * @param {typeof fetch} opts.fetchImpl  injected fetch
+   * @param {string} [opts.token]          bridge token; required by the default bridge
    * @param {boolean} [opts.allowEval]     allow the agent to evaluate expressions
    * @param {(expr: string) => any} [opts.evalFn]  evaluator (browser: window.eval)
    * @param {() => string} [opts.pageUrl]  current page URL getter
    */
-  constructor({ serverUrl, fetchImpl, allowEval = false, evalFn = null, pageUrl }) {
+  constructor({ serverUrl, fetchImpl, token = "", allowEval = false, evalFn = null, pageUrl }) {
     this.serverUrl = serverUrl.replace(/\/$/, "");
     this.fetch = fetchImpl;
+    this.token = String(token);
     this.allowEval = allowEval;
     this.evalFn = evalFn;
     this.pageUrl = pageUrl || (() => "");
@@ -98,7 +103,7 @@ export class ProbeCore {
     };
     const res = await this.fetch(`${this.serverUrl}/probe/poll`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-sutradhar-probe-token": this.token },
       body: JSON.stringify(payload),
     });
     const data = await res.json();
@@ -106,7 +111,7 @@ export class ProbeCore {
       const result = await this.handleQuery(q);
       await this.fetch(`${this.serverUrl}/probe/result`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-sutradhar-probe-token": this.token },
         body: JSON.stringify(result),
       });
     }
