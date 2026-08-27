@@ -91,7 +91,7 @@ Stated tool by tool, so you can tell before you clone:
 | Tool | Runs against | Why |
 |---|---|---|
 | `verify_guard.py` | **Any language**, any git repo | The guard command is yours - `go test ./...`, `npm test`, `cargo test`. It reverts your fix in a throwaway worktree and reruns *your* command; Python runs the tool, not your code. |
-| `obsgate.py` | **Any stack** | It consumes Prometheus text format from a file or an endpoint. It checks the metrics surface, never the source behind it. |
+| `obsgate.py` | **Any stack** | It consumes Prometheus text format from a file or an endpoint. It checks the metrics surface, never the source behind it: does the declared floor exist, is the exporter frozen, and can a before/after snapshot pair witness the change you made. |
 | `rounds.py` | **Any language** | It reads markdown round records. |
 | `budget.py` | **Any repo whose design notes are markdown** | It reads the declared numbers from a design note's frontmatter and requires a test file to reference them (`.py`, `.ts`, `.js`, `.tsx`, `.mjs`). |
 | `js/probe/` | **Any browser app** | Plain ESM, zero dependencies, bundler-agnostic; the agent side is `curl`. |

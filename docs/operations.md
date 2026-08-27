@@ -59,8 +59,8 @@ honest comment block, never an empty 200 a scraper reads as "all zero".
 
 This floor is a **provenance gate**, and it is mechanised: `obsgate.py`
 takes the floor as a JSON manifest and a metrics payload (file or endpoint)
-and answers WITNESSED / UNWITNESSED / INCONCLUSIVE. Wire it into CI against
-a staging endpoint, or into a deploy gate against production:
+and answers WITNESSED / UNWITNESSED / FROZEN / INCONCLUSIVE. Wire it into CI
+against a staging endpoint, or into a deploy gate against production:
 
     python obsgate.py --metrics https://svc/metrics --floor obs_floor.json
 
@@ -70,6 +70,67 @@ system that no surface witnessed does not leave the building (5.1). An
 empty payload FAILS - "no data" and "all zero" must never read the same -
 and an unreachable endpoint is INCONCLUSIVE, never a pass, because a dead
 endpoint witnesses nothing.
+
+A 200 is not evidence either. An exporter that caches, or whose collection
+loop has wedged, serves stale truth behind a healthy status line, and that
+reads exactly like a live surface. Scrape it more than once:
+
+    python obsgate.py check --metrics https://svc/metrics --floor f.json \
+                            --samples 3 --interval-ms 500
+
+Byte-identical payloads across every sample, on a surface whose floor
+declares counters that ought to move, is **FROZEN** (exit 4) - its own word,
+not UNWITNESSED, because the metrics are all present and the fix is not "add
+metrics". A surface with no must-move counter is never accused: a false
+finding costs more trust than no finding (6.4).
+
+Every refusal names **which of three parties failed** - `instrument:`
+(obsgate itself: bad flag, parser raised), `endpoint:` (unreachable, empty,
+frozen), or `floor:` (the surface is fine, the declaration is not met).
+*The scar: a polling loop printed ten "no response" lines about an API that
+was serving 200s in 0.27s, because a bug in the poller raised and a shell
+fallback spoke on the server's behalf.* An instrument that cannot say whose
+failure it is always blames the system.
+
+## Witnessing effects, not just surfaces (doctrine 6.6)
+
+The floor answers "does the surface exist". It does not answer the harder
+half of 6.6 - *a change to a running system is done only when its effect can
+be witnessed at a runtime surface* - and until you can compute that, it is a
+sentence people nod at. Snapshot the surface before and after, and declare
+what the change should have done:
+
+    python obsgate.py snapshot --metrics https://svc/metrics --out before.json
+    # ...deploy, run the job, hit the new route...
+    python obsgate.py snapshot --metrics https://svc/metrics --out after.json
+    python obsgate.py effects --before before.json --after after.json \
+                              --floor obs_floor.json
+
+A snapshot is a deterministic digest - per family: type, series count,
+sorted label keys, value sum, and a sha256 over the sorted series - so two
+snapshots of an unchanged surface are identical apart from `captured_at`.
+The `effects` section of the floor manifest declares what to look for, and
+`obs_floor.json` in `docs/templates/` ships a documented example of all four
+kinds: `increased`, `appeared`, `no_vanished_series`, `stable_labels`.
+
+Exit 0 when every effect is witnessed, 1 when any is not, 2 when the command
+cannot answer. Three properties are worth knowing before you wire it in:
+
+- **A miss states its direction.** `expected-increase-but-fell`,
+  `expected-appear-but-absent`, `expected-increase-but-family-VANISHED`. A
+  verdict's word is part of its correctness (2.4 + 5.1); nobody re-derives a
+  figure that arrived with a confident label.
+- **A counter that fell is `COUNTER_RESET`, not a generic failure.** Same
+  arithmetic, opposite diagnosis: the process restarted, and the effect you
+  asked about may well have happened where this surface can no longer see
+  it. Sending someone to debug a feature over a restart wastes the day.
+- **Nothing passes vacuously.** No `effects` section, an empty before
+  snapshot, or a question about a label whose value set exceeded the
+  snapshot's cardinality cap each REFUSE - `UNANSWERABLE`, never a pass.
+  A gate that certifies an unstated change is worse than no gate.
+
+Design note, with the budgets and the deliberate non-goals:
+[docs/design/obsgate-depth.md](design/obsgate-depth.md).
 
 ## Shared-host hygiene
 

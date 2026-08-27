@@ -3,7 +3,8 @@
     "Observability floor for doctrine 6.6, read by obsgate.py.",
     "",
     "Each surface names a metric family a later claim will lean on. The gate",
-    "answers WITNESSED / UNWITNESSED / INCONCLUSIVE against a live payload:",
+    "answers WITNESSED / UNWITNESSED / FROZEN / INCONCLUSIVE against a live",
+    "payload:",
     "",
     "  python scripts/obsgate.py --metrics http://localhost:9090/metrics \\",
     "                            --floor obs_floor.json",
@@ -39,5 +40,57 @@
       "pattern": "^dependency_up$",
       "min_series": 1
     }
+  ],
+
+  "_effects_comment": [
+    "OPTIONAL. `surfaces` answers 'does the surface exist'. `effects` answers",
+    "the other half of 6.6: 'was the change I made actually WITNESSED there'.",
+    "",
+    "  obsgate.py snapshot --metrics http://svc/metrics --out before.json",
+    "  ...deploy / run the job / hit the new route...",
+    "  obsgate.py snapshot --metrics http://svc/metrics --out after.json",
+    "  obsgate.py effects --before before.json --after after.json \\",
+    "                     --floor obs_floor.json",
+    "",
+    "Exit 0 when every effect is witnessed, 1 when any is not (each named",
+    "with its DIRECTION - expected-increase-but-fell, expected-appear-but-",
+    "absent), 2 when the command cannot answer. Deleting this section does",
+    "NOT make `effects` pass: with nothing declared it refuses and exits 2,",
+    "because a vacuous 0 would be a tool certifying an unstated change.",
+    "",
+    "The four kinds:",
+    "",
+    "  increased   the family's value sum strictly rose (optionally by at",
+    "              least `min_delta`). A counter that FELL is reported as",
+    "              COUNTER_RESET, not as a plain miss - a restart and an",
+    "              absent effect need different fixes.",
+    "  appeared    a family, or a specific label VALUE on a family, exists",
+    "              now and did not before. Use it to prove a new route",
+    "              template, tenant, or job type is actually instrumented.",
+    "              Already-present is a MISS, not a pass: an effect that",
+    "              cannot discriminate is the wrong declaration.",
+    "  no_vanished_series",
+    "              nothing that used to report has stopped. A vanished",
+    "              metric is how a deleted instrument reads as zero traffic.",
+    "              `allow` lists families you removed on purpose.",
+    "  stable_labels",
+    "              no label KEY appeared or disappeared on the family. A new",
+    "              key multiplies the series count and silently re-partitions",
+    "              every dashboard query built on it.",
+    "",
+    "Delete the examples below and declare the effects YOUR change should",
+    "have. An effect nobody can name is a change nobody can prove happened."
+  ],
+  "effects": [
+    { "kind": "increased", "family": "http_requests_total", "min_delta": 1 },
+    { "kind": "increased", "family": "jobs_succeeded_total" },
+    {
+      "kind": "appeared",
+      "family": "http_requests_total",
+      "label": "route",
+      "value": "/api/exports"
+    },
+    { "kind": "no_vanished_series" },
+    { "kind": "stable_labels", "family": "http_requests_total" }
   ]
 }

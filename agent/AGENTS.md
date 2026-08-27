@@ -67,8 +67,11 @@ Every rule below was earned by a real defect; the full stories are in
    answering with an empty 200 has turned "no data" into "all zero", and
    every number read from it afterward is fabricated with extra steps.
    `obsgate.py` checks a declared floor and answers WITNESSED /
-   UNWITNESSED / INCONCLUSIVE - and a source it could not read is
-   INCONCLUSIVE, never a pass.
+   UNWITNESSED / FROZEN / INCONCLUSIVE - and a source it could not read is
+   INCONCLUSIVE, never a pass. For the other half of the rule - was your
+   change actually witnessed - snapshot the surface before and after and
+   run `obsgate.py effects`, which answers per declared effect and refuses
+   rather than passing when the data cannot say.
 
 ## Before committing
 
