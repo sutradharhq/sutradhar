@@ -80,6 +80,31 @@ harness that only has one of them leaks defects through the other two.
 | **Outer** (regression gate) | Does everything still work after every future change? | Behavioral UI guards (effect assertions, error-boundary and console sweeps, paint-defect detection), Python lint ratchets, class-invariant test helpers, CI templates. [js/](js/), [python/](python/), [ci/](ci/) |
 | **Meta** (the process) | Is the way we work producing correct software? | The doctrine, plus the tool that enforces its hardest rule: `verify_guard.py` reverts your fix and requires the guard to go red. [DOCTRINE.md](DOCTRINE.md), [agent/](agent/) |
 
+## What works on your stack today
+
+The guards are written in Python, which is not the same thing as being *for*
+Python. Most of them read artifacts your stack already produces - a git
+history, a metrics endpoint, a markdown note - and never look at your source
+at all. Three of them parse a Python AST and only those three are Python-bound.
+Stated tool by tool, so you can tell before you clone:
+
+| Tool | Runs against | Why |
+|---|---|---|
+| `verify_guard.py` | **Any language**, any git repo | The guard command is yours - `go test ./...`, `npm test`, `cargo test`. It reverts your fix in a throwaway worktree and reruns *your* command; Python runs the tool, not your code. |
+| `obsgate.py` | **Any stack** | It consumes Prometheus text format from a file or an endpoint. It checks the metrics surface, never the source behind it. |
+| `rounds.py` | **Any language** | It reads markdown round records. |
+| `budget.py` | **Any repo whose design notes are markdown** | It reads the declared numbers from a design note's frontmatter and requires a test file to reference them (`.py`, `.ts`, `.js`, `.tsx`, `.mjs`). |
+| `js/probe/` | **Any browser app** | Plain ESM, zero dependencies, bundler-agnostic; the agent side is `curl`. |
+| `js/cypress/uiGuards.ts` | **TypeScript + Cypress** | Shipped for Cypress. The guards are small and DOM-level, so the Playwright port is mostly mechanical. |
+| `ratchet.py`, `claim_check.py`, `golden.py`, `envgate.py` | **Python test suites** | Libraries you import into your own tests. The patterns port; the code is Python. |
+| `swallow_lint.py`, `interpolation_lint.py`, `detectors.py` | **Python source only** | These three parse a Python AST. The ratchet *pattern* ports to any language in an afternoon; the shipped detectors do not. |
+| DOCTRINE.md, `agent/`, `docs/`, `ci/` | **Any stack** | Rules, playbooks, agent packs, CI shape. |
+
+So: the governance, provenance, and observability half of the harness works
+today whatever you write in; the source-scanning half is Python. A TypeScript
+kit - the AST-bound lints, ported - is the next planned expansion. No date; it
+ships when it ships, and this table gets a row when it does.
+
 ## What is in the box
 
 ```
@@ -134,6 +159,7 @@ sutradhar/
 │   └── broken-app/          The app they live in, tests and all
 ├── agent/
 │   ├── AGENTS.md            Drop-in operating rules for any coding agent (CLAUDE.md compatible)
+│   ├── packs/               The same rules condensed: a CLAUDE.md snippet and a Cursor rules file
 │   └── skills/
 │       ├── robustness-loop.md     A repeatable adversarial depth sweep
 │       └── ops-drill.md           Operate the system, don't read it
@@ -175,7 +201,9 @@ Then:
 
 1. **Give your agent the rules.** Append `agent/AGENTS.md` to your project's
    `CLAUDE.md` / `AGENTS.md` / rules file, or keep it as its own file and
-   reference it.
+   reference it. If 15KB is more than your rules file will take,
+   [`agent/packs/`](agent/packs/) has the one-page condensed form for
+   `CLAUDE.md` and a Cursor rules file carrying the same rules.
 2. **Turn on the Python guards** (any Python backend):
    ```bash
    python scripts/swallow_lint.py src/ --update-baseline   # record today's floor
