@@ -8,7 +8,7 @@
 #   frontend ui guards   -> <repo>/cypress/support/uiGuards.ts (+ example spec)
 #   probe    runtime probe -> <repo>/probe/
 #   ci       workflow    -> <repo>/.github/workflows/guards.yml
-#   agent    rules+skills -> <repo>/AGENTS.sutradhar.md, skills dir
+#   agent    rules+skills -> <repo>/AGENTS.sutradhar.md, skills dir, agent-packs/
 #   docs     doctrine + design-note template + obs floor
 #
 #   bash bootstrap.sh . --layers python,ci,agent,docs   # a backend service
@@ -123,6 +123,10 @@ else
 fi
 copy "$HERE/agent/skills/robustness-loop.md" "$SKILLS_DIR/robustness-loop/SKILL.md"
 copy "$HERE/agent/skills/ops-drill.md"       "$SKILLS_DIR/ops-drill/SKILL.md"
+# The condensed forms, for the rules files that will not take 15KB.
+copy "$HERE/agent/packs/README.md"           "$TARGET/agent-packs/README.md"
+copy "$HERE/agent/packs/CLAUDE-snippet.md"   "$TARGET/agent-packs/CLAUDE-snippet.md"
+copy "$HERE/agent/packs/cursor.rules.md"     "$TARGET/agent-packs/cursor.rules.md"
 fi
 
 if want docs; then
@@ -153,6 +157,8 @@ echo "  2b. prove your next fix's guard is real:"
 echo "      python scripts/verify_guard.py --guard-cmd \"pytest tests/test_the_fix.py\""
 echo "  3. configure uiGuards in cypress/support/e2e.ts and adapt the route sweep"
 echo "  4. append AGENTS.sutradhar.md to your CLAUDE.md / AGENTS.md"
+echo "     (or the one-page form: cat agent-packs/CLAUDE-snippet.md >> CLAUDE.md;"
+echo "      Cursor: cp agent-packs/cursor.rules.md .cursorrules)"
 echo "  5. adjust .github/workflows/guards.yml paths to your layout"
 echo
 echo "adoption guide: $HERE/docs/adoption.md"
