@@ -7,6 +7,51 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**obsgate answers the other half of 6.6** (round 12; design note:
+[docs/design/obsgate-depth.md](docs/design/obsgate-depth.md)). The gate could
+say whether a surface EXISTS. It could not say whether a change was
+witnessed there, which is the half of doctrine 6.6 that decides when a task
+is done. Three additions, all depth on the one tool - the existing
+invocation (`obsgate --metrics X --floor Y`) and its exit codes are
+unchanged, and subcommands extend rather than replace it:
+
+- **`obsgate snapshot --metrics X --out snap.json`** - a deterministic
+  digest of a metrics surface: per family, its `# TYPE`, series count,
+  sorted label keys, order-independent value sum, and a sha256 over the
+  sorted series, plus a whole-surface digest. Two snapshots of an unchanged
+  surface are identical apart from `captured_at`. Label values are retained
+  only up to a cap, past which the snapshot records that it **stopped
+  looking** - a snapshot storing every distinct value would rebuild, inside
+  its own file, the cardinality bomb the floor check exists to catch.
+- **`obsgate effects --before a.json --after b.json --floor f.json`** -
+  doctrine 6.6 as an exit code. The floor manifest gains an optional
+  `effects` section with four kinds: `increased` (with counter-RESET
+  detection, because a counter that fell restarted rather than declined),
+  `appeared` (a family, or a specific label value), `no_vanished_series` (a
+  vanished metric is how a deleted instrument reads as zero traffic), and
+  `stable_labels` (cardinality-shape drift). Each miss names its
+  **direction**; each unanswerable question says so rather than passing. A
+  manifest with no `effects` section **refuses and exits 2** - a vacuous 0
+  would be a tool certifying an unstated change.
+- **`--samples N --interval-ms M`** - byte-identical payloads across every
+  scrape, on a surface declaring counters that must move, is **FROZEN**
+  (exit 4), a verdict distinct from UNWITNESSED because every metric is
+  present and the fix is not "add metrics". A surface with no must-move
+  counter is never accused.
+
+Every failure message now names **which of three parties failed**:
+`instrument:` (obsgate itself - bad flag, parser raised, its own cap hit),
+`endpoint:` (unreachable, empty, non-metrics, frozen, vanished), or `floor:`
+(the declaration is not met). A parser crash is caught narrowly, printed
+with its exception type, and explicitly disclaimed as evidence about the
+endpoint. An HTML error page is now diagnosed as a non-metrics payload
+rather than lumped in with an empty 200. Twelve mutations were run against
+the new detectors - blinding frozen detection, counter-reset naming,
+vanished-family detection, `appeared`'s before-state, label-key drift, the
+no-effects refusal, the digest's sort, two party attributions, the label cap,
+the non-metrics diagnosis, and the declared latency envelope - and every one
+turned the selfcheck or the suite red. 49 tests added.
+
 **Probe bridge hardening - BREAKING for anyone scripting the endpoints**
 (round 10; design note: [docs/design/probe-auth.md](docs/design/probe-auth.md)).
 An external adversarial review demonstrated that any webpage open in the
