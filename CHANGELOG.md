@@ -7,6 +7,60 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**The guards become tools an agent calls MID-task** (round 13; design note:
+[docs/design/mcp-server.md](docs/design/mcp-server.md)). Every guard here
+runs in CI, which is to say after the agent has stopped. `mcp_server.py` is
+a second placement, not a replacement: a stdlib-only MCP stdio server
+exposing nine guards as tools, so an agent can ask `verify_guard` whether
+the guard it just wrote actually goes red *while it is still writing it*.
+
+    claude mcp add sutradhar -- python3 /path/to/sutradhar_guards/mcp_server.py
+
+- **Nine tools**, each shelling out to the **real guard CLI** via
+  `subprocess` rather than importing it (doctrine 2.3 - an in-process
+  adapter can pass while the command a human types fails):
+  `verify_guard`, `budget_check`, `obsgate_check`, `obsgate_snapshot`,
+  `obsgate_effects`, `rounds_check`, `swallow_lint`, `interpolation_lint`,
+  `framework_only`. Each carries a JSON input and output schema and a
+  description written for an agent to route on.
+- **A red guard is a RESULT, not an error.** The distinction the whole
+  design turns on. A guard that RAN returns `isError: false` with its
+  verdict in `structuredContent`, green or red, because a red guard is the
+  tool working; per the spec `isError: true` means "retry with adjusted
+  parameters", and `DECORATION` is not fixed by adjusting parameters. Only
+  a guard that could **not run** - missing file, spawn failure, timeout,
+  unreadable exit code, bad arguments - is a JSON-RPC error, attributed to
+  the `instrument` so it can never be mistaken for a finding about your
+  code. Exit codes are partitioned **per tool**, because `verify_guard`'s
+  exit 2 is the verdict INCONCLUSIVE while every other guard's exit 2 is a
+  usage error.
+- **Bounded output.** A tool result goes straight into a model's context
+  window, so an uncapped one is the 2.6 unbounded-read class with a more
+  expensive consumer. Capped at 65,536 bytes per stream, and truncation is
+  **stated** in both the text and the structured content - a partial
+  finding list read as a complete one is worse than no list.
+- **Dual-era, verified against the specification rather than recalled.**
+  The current protocol revision (`2026-07-28`) has **no handshake**:
+  version and capabilities ride in every request's `_meta`, and
+  `server/discover` replaces `initialize`. The `initialize` handshake is
+  legacy (`2025-11-25` and earlier). This server serves both, which the
+  spec permits explicitly, and refuses an unknown version with the
+  spec-defined `-32022` naming what it does support.
+- **`--selfcheck` spawns itself** over real stdio, handshakes in both eras,
+  lists every tool, and calls a real guard twice - green and red - to
+  confirm the red one comes back as a result. `SUTRADHAR_MCP_GUARD_DIR`
+  (for adopters who copied the guards elsewhere) doubles as its falsifier:
+  pointed at an empty directory, the selfcheck must go red.
+
+Nine mutations were run against the result. One **survived the first run**:
+the test guarding the per-tool exit-code partition read the declaration in
+the tool table and never exercised the code that consults it, so collapsing
+the partition - which turns every usage error into a pass - left the suite
+green. Fixed with two tests that drive the runtime seam, after which no
+mutant survived. 44 tests added; the CI path, every guard CLI, every flag
+and every exit code are unchanged, and copy-in remains the primary
+contract.
+
 **obsgate answers the other half of 6.6** (round 12; design note:
 [docs/design/obsgate-depth.md](docs/design/obsgate-depth.md)). The gate could
 say whether a surface EXISTS. It could not say whether a change was

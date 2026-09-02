@@ -138,7 +138,8 @@ sutradhar/
 │   │   ├── golden.py              Golden-dataset gate with reasoned re-baseline
 │   │   ├── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
 │   │   ├── obsgate.py             Observability floor as a provenance gate (6.6)
-│   │   └── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
+│   │   ├── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
+│   │   └── mcp_server.py          Optional MCP stdio server: the guards as agent-callable tools
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/
 │   ├── cypress/
@@ -203,7 +204,11 @@ Then:
    `CLAUDE.md` / `AGENTS.md` / rules file, or keep it as its own file and
    reference it. If 15KB is more than your rules file will take,
    [`agent/packs/`](agent/packs/) has the one-page condensed form for
-   `CLAUDE.md` and a Cursor rules file carrying the same rules.
+   `CLAUDE.md` and a Cursor rules file carrying the same rules. To let the
+   agent *run* the guards mid-task instead of waiting for CI, register the
+   optional MCP server - `claude mcp add sutradhar -- python3
+   python/sutradhar_guards/mcp_server.py` - which exposes nine guards as
+   tools ([docs/design/mcp-server.md](docs/design/mcp-server.md)).
 2. **Turn on the Python guards** (any Python backend):
    ```bash
    python scripts/swallow_lint.py src/ --update-baseline   # record today's floor
