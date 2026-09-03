@@ -44,6 +44,18 @@ should have carried them here sooner** (round 14; register:
   `practice` evidence (a documented intention) may strengthen an existing
   scarred rule's mechanism but may not found a new rule - 8.1, enforced.
   Closes R7-1, high and deferred since round 7.
+- **`rounds.py --designs <notes>`** (new): 8.1 for *mechanisms*, not just
+  rules. Every note under `docs/design/` must carry a `sutradhar_scar:` in its
+  frontmatter naming the finding id(s) that paid for it - each one resolved
+  against the round records, any status - or the literal `distribution` plus a
+  `sutradhar_scar_argument:` sentence admitting it entered on reach rather than
+  an incident. A missing key, an id no record contains, a bare `distribution`,
+  and a note the parser cannot read all fail; a notes directory that is absent
+  or empty exits 2, because nothing was checked. Every note here already cited
+  a scar in its prose *by habit* and one cited nothing at all - which is the
+  difference this closes. `TEMPLATE.md` is skipped by name, as the budget gate
+  skips it. **Adopters must add the field**: the gate refuses a note without
+  it rather than passing over it.
 
 **The guards become tools an agent calls MID-task** (round 13; design note:
 [docs/design/mcp-server.md](docs/design/mcp-server.md)). Every guard here

@@ -1,4 +1,6 @@
 ---
+sutradhar_scar: distribution
+sutradhar_scar_argument: The guards already existed and already ran; no finding says CI-only placement lost anything. What this note argues is reach - the same guards as tools an agent calls mid-task instead of twenty minutes after the commit.
 sutradhar_budget: mcp-roundtrip
 n: 200
 n_unit: round trips

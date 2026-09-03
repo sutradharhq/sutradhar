@@ -1,4 +1,5 @@
 ---
+sutradhar_scar: R10-1
 sutradhar_budget: probe-auth
 n: 128
 n_unit: token bits

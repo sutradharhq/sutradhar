@@ -77,6 +77,7 @@ corpus becomes a style guide.
 | R14-5 | med | 8.1 | thread survey | deferred | this repo's public `DOCTRINE.md` lags the maintainer's standing doctrine and the two have diverged in section 2; two independent agents cited a section 6 rule that does not exist here. Reconciling them must not renumber published ids - 89 findings cite them (B-19) |
 | R14-6 | med | 5.1 | Thread-K | deferred | per-value provenance tiers with weakest-input propagation - the strong form of what 5.1 has owed since round 7 (B-7) |
 | R14-7 | low | 8.1 | thread survey | deferred | candidates drawn from charters and protocols carry no recorded cost; the register marks them `practice` and refuses them as new rules, but nothing yet measures how many `practice` items later earn a scar (B-11, B-12) |
+| R14-8 | med | 8.1 | maintainer question | fixed | mechanisms had no admission criterion - every design note that entered cited a scar by habit, one cited nothing, and nothing would have refused a note that cited nothing. `--designs` now requires every note to name the finding that paid for it or to say `distribution` out loud |
 
 ## What was ruled out (7.4)
 
@@ -113,6 +114,11 @@ Every guard added this round was shown able to fail before it was trusted.
 | | malformed rows skipped again | 1 red |
 | | missing register reports OK | 1 red |
 | | reasonless deferral accepted | 2 red |
+| scar gate | the unknown-id check never fires | 10 red (2 direct, 8 through the selfcheck `main` runs first) |
+| | a missing `sutradhar_scar` is skipped, not refused | 10 red (2 direct, 8 the same way) |
+| | `distribution` no longer requires an argument | 10 red (2 direct, 8 the same way) |
+| | a missing designs directory returns 0 | 3 red |
 | `rounds --selfcheck` | overdue check disabled | exit 1 (exit 0 when restored) |
+| | unknown-id check disabled | exit 1 (exit 0 when restored) |
 
-344 tests, up from 310.
+370 tests, up from 310.

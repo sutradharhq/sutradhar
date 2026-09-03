@@ -1,3 +1,7 @@
+---
+sutradhar_scar: R4-5
+---
+
 # Design note: scope — framework, not a product
 
 <!-- The repo's own scope statement. It has a matching gate, so this note is

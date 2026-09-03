@@ -128,7 +128,7 @@ sutradhar/
 ├── python/
 │   ├── sutradhar_guards/
 │   │   ├── budget.py              Design-time cardinalities that tests must enforce
-│   │   ├── rounds.py              Flight recorder: stop rule, residual register, attribution, backflow gate
+│   │   ├── rounds.py              Flight recorder: stop rule, residual register, attribution, backflow + scar gates
 │   │   ├── verify_guard.py        Proves a guard can fail: reverts the fix, demands red
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)

@@ -52,6 +52,11 @@ jobs:
         # by-round fails here until somebody adopts, rejects, or re-defers it
         # with a reason. Removing this step restores the original defect.
         run: python python/sutradhar_guards/rounds.py docs/rounds/ --backflow docs/backflow.md
+      - name: Every design note names the incident that paid for it
+        # R14-8: 8.1 for mechanisms. A note cites finding ids that must
+        # resolve against the round records, or says `distribution` out loud
+        # with a reason. Without this a mechanism enters on argument alone.
+        run: python python/sutradhar_guards/rounds.py docs/rounds/ --designs docs/design/
       - name: Round records are valid (rule ids resolve)
         # A mistyped rule id silently loses the attribution 8.1
         # depends on, and nothing else would ever notice.
