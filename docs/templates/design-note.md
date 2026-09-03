@@ -1,4 +1,6 @@
 ---
+sutradhar_scar: <finding-id, or `distribution`>
+sutradhar_scar_argument: <one sentence - required only when the scar is `distribution`>
 sutradhar_budget: <short-id>
 n: 200000
 n_unit: rows
@@ -18,7 +20,15 @@ ci_slack: 2.0
      The frontmatter above is READ BY THE TEST SUITE. Delete any line you
      genuinely have no number for; keep at least one. Flat `key: value`
      scalars only - the parser refuses anything it would have to guess at.
-     See docs/design/lint-scan.md for a filled-in example. -->
+     See docs/design/lint-scan.md for a filled-in example.
+
+     `sutradhar_scar` is REQUIRED and is doctrine 8.1 applied to mechanisms:
+     name the finding id(s) from your round records that paid for this one,
+     comma-separated, and `rounds.py --designs` will resolve every one of
+     them. If no incident paid for it - if what you are really arguing is
+     reach, adoption or convenience - write `distribution` and say so in one
+     sentence in `sutradhar_scar_argument`. That is a legitimate answer. A
+     mechanism that entered on argument alone and never said so is not. -->
 
 ## What and why
 

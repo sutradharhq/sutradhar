@@ -1,4 +1,5 @@
 ---
+sutradhar_scar: R3-1, R4-1
 sutradhar_budget: obsgate-snapshot
 n: 10000
 n_unit: series

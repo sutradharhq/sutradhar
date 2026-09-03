@@ -91,6 +91,29 @@ BACKFLOW_COLUMNS = (
     "id", "source", "what", "evidence", "rule", "status", "by-round", "note",
 )
 
+# ── design-note scar admission ──────────────────────────────────────────────
+# 8.1 says a rule enters with the incident that paid for it. The backflow
+# register mechanises that for RULES. Nothing mechanised it for MECHANISMS: a
+# design note could enter on argument alone. Every note in this repo happened
+# to cite a scar in its prose, one cited nothing, and no gate would have
+# refused a note that cited nothing - which is the difference between a
+# discipline and a habit.
+#
+# `sutradhar_scar` makes the admission explicit and machine-checkable. Its
+# value is either finding ids that must RESOLVE against the round records, or
+# the literal `distribution`, which is an honest admission that the mechanism
+# entered on an adoption argument rather than an incident - and which then
+# owes a sentence saying so. `distribution` is a legitimate answer; an
+# unstated one is not.
+SCAR_KEY = "sutradhar_scar"
+SCAR_ARGUMENT_KEY = "sutradhar_scar_argument"
+SCAR_DISTRIBUTION = "distribution"
+# The template ships with placeholder frontmatter and is reference material,
+# not a design note. Skipped by name, exactly as budget.py skips it, so a
+# fresh bootstrap does not open on a false red.
+DESIGN_TEMPLATE_NAME = "TEMPLATE.md"
+_FINDING_ID = re.compile(r"R\d+-\d+")
+
 _HEADING = re.compile(r"^#\s+Round\s+(\d+)\s*[-–—]\s*(\d{4}-\d{2}-\d{2})\s*$",
                       re.MULTILINE)
 _LENSES = re.compile(r"^Lenses:\s*(.+)$", re.IGNORECASE)
@@ -361,6 +384,138 @@ def backflow_problems(
                 f"may strengthen the mechanism of a rule that already has a "
                 f"scar; cite that rule instead."
             )
+    return problems
+
+
+@dataclass
+class ScarCitation:
+    source: str
+    findings: list[str] = field(default_factory=list)
+    distribution: bool = False
+    argument: str = ""
+
+
+# The strict frontmatter parser below MIRRORS `parse_frontmatter` in
+# budget.py, deliberately duplicated rather than imported. These files are
+# copy-in: an adopter who took rounds.py and not budget.py must still get a
+# working gate, and an import between two single-file guards is a dependency
+# the copier cannot see until it fails at runtime in their repo. Twenty-five
+# lines is a cheaper price than that. The strictness IS the contract - flat
+# `key: value` scalars only, no nesting, no unclosed block, no duplicate key -
+# because a parser that guesses turns an unreadable note into "no note here"
+# (2.9). If either copy changes, change both; they read the same documents.
+_SCALAR = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$")
+
+
+def parse_note_frontmatter(text: str, source: str = "") -> dict | None:
+    """Parse a leading `---` fenced block of flat `key: value` pairs.
+
+    Returns None when the document has no frontmatter. Raises RoundError on a
+    block it cannot parse strictly."""
+    where = f"{source}: " if source else ""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    try:
+        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        raise RoundError(
+            f"{where}frontmatter opened with '---' but never closed"
+        ) from None
+
+    out: dict = {}
+    for lineno, raw in enumerate(lines[1:end], start=2):
+        line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
+        if not line.strip():
+            continue
+        match = _SCALAR.match(line.strip())
+        if not match:
+            raise RoundError(
+                f"{where}line {lineno}: cannot parse {line.strip()!r}. "
+                f"Design-note frontmatter takes flat `key: value` scalars "
+                f"only - no lists, no nesting."
+            )
+        key, value = match.group(1), match.group(2).strip().strip('"').strip("'")
+        if key in out:
+            raise RoundError(f"{where}line {lineno}: {key!r} declared twice")
+        out[key] = value
+    return out
+
+
+def parse_scar(text: str, source: str = "") -> ScarCitation:
+    """Read one design note's admission of what paid for it.
+
+    Refuses rather than skips, in every direction: no frontmatter, no
+    `sutradhar_scar`, an empty value, an id that is not of the form R<n>-<m>,
+    or `distribution` with no argument. A note that entered on nothing and a
+    note the parser could not read must not be spelled the same as a note
+    that passed.
+    """
+    where = source or "<note>"
+    data = parse_note_frontmatter(text, source=source)
+    missing = (
+        f"{where}: no `{SCAR_KEY}:` in the frontmatter. 8.1 - a mechanism "
+        f"enters with the incident that paid for it. Name the finding id(s) "
+        f"from the round records, or say `{SCAR_DISTRIBUTION}` and add "
+        f"`{SCAR_ARGUMENT_KEY}:` stating why this entered on an adoption "
+        f"argument instead. Both are answers; silence is not."
+    )
+    if data is None or SCAR_KEY not in data:
+        raise RoundError(missing)
+    raw = data[SCAR_KEY].strip()
+    if not raw:
+        raise RoundError(missing)
+    argument = data.get(SCAR_ARGUMENT_KEY, "").strip()
+
+    if raw == SCAR_DISTRIBUTION:
+        if not argument:
+            raise RoundError(
+                f"{where}: `{SCAR_KEY}: {SCAR_DISTRIBUTION}` with no "
+                f"`{SCAR_ARGUMENT_KEY}:`. Entering on distribution is an "
+                f"allowed answer and an unstated one is not - a bare "
+                f"`{SCAR_DISTRIBUTION}` is the argument-alone admission this "
+                f"gate exists to make somebody write down."
+            )
+        return ScarCitation(source=where, distribution=True, argument=argument)
+
+    ids = [part.strip() for part in raw.split(",") if part.strip()]
+    if not ids:
+        raise RoundError(missing)
+    for ident in ids:
+        if not _FINDING_ID.fullmatch(ident):
+            raise RoundError(
+                f"{where}: {ident!r} is not a finding id. Expected R<n>-<m> "
+                f"(comma-separated for several) or the literal "
+                f"`{SCAR_DISTRIBUTION}`."
+            )
+    return ScarCitation(source=where, findings=ids, argument=argument)
+
+
+def load_design_notes(root: str | Path) -> list[Path]:
+    root = Path(root)
+    files = [root] if root.is_file() else sorted(root.rglob("*.md"))
+    return [p for p in files if p.name != DESIGN_TEMPLATE_NAME]
+
+
+def scar_problems(
+    citations: list[ScarCitation], known_findings: set[str],
+) -> list[str]:
+    """Cited findings that no round record contains.
+
+    A citation nobody can resolve is the same failure as no citation with a
+    better disguise: it reads as provenance and carries none. Any status
+    counts - a finding deferred for six rounds is still an incident that was
+    paid for, and refusing those would push notes towards citing nothing.
+    """
+    problems: list[str] = []
+    for c in citations:
+        for ident in c.findings:
+            if ident not in known_findings:
+                problems.append(
+                    f"  {c.source}: cites {ident}, which is not a finding in "
+                    f"any round record. An id nobody can resolve reads as "
+                    f"provenance and carries none (8.1)."
+                )
     return problems
 
 
@@ -779,18 +934,62 @@ def _selfcheck_body() -> bool:
         except RoundError:
             pass
 
+        # ── the scar admission gate ──────────────────────────────────────
+        # Planted known-bad cases, because this gate's whole value is that a
+        # mechanism entering on argument alone eventually costs something. A
+        # gate that always answered OK would be the habit it replaced.
+        known_findings = {"R10-1"}
+
+        def _scar(front: str) -> ScarCitation:
+            return parse_scar(f"---\n{front}---\n\n# Design note: planted\n",
+                              source="<selfcheck>")
+
+        if scar_problems([_scar("sutradhar_scar: R10-1\n")], known_findings):
+            print("[rounds] SELFCHECK FAILED: a note citing a finding that "
+                  "exists in the records was refused", file=sys.stderr)
+            ok = False
+
+        if not scar_problems([_scar("sutradhar_scar: R99-9\n")], known_findings):
+            print("[rounds] SELFCHECK FAILED: a note cited a finding id no "
+                  "round record contains and the gate passed it. An id "
+                  "nobody can resolve reads as provenance and carries none",
+                  file=sys.stderr)
+            ok = False
+
+        for label, front in (
+            ("no scar key at all", "sutradhar_budget: planted\n"),
+            ("`distribution` with no argument", "sutradhar_scar: distribution\n"),
+        ):
+            try:
+                _scar(front)
+                print(f"[rounds] SELFCHECK FAILED: accepted a design note with "
+                      f"{label}", file=sys.stderr)
+                ok = False
+            except RoundError:
+                pass
+
+        honest = _scar("sutradhar_scar: distribution\n"
+                       "sutradhar_scar_argument: adopters need a worked example\n")
+        if not honest.distribution or scar_problems([honest], known_findings):
+            print("[rounds] SELFCHECK FAILED: an honest distribution admission "
+                  "carrying its argument was refused; the gate must leave a "
+                  "way to say it out loud", file=sys.stderr)
+            ok = False
+
     if ok:
         print(
             "[rounds] selfcheck ok: records parsed, stop rule converges, residual "
             "register held, attribution refused below the evidence floor, "
-            "backflow gate bites on an overdue item"
+            "backflow gate bites on an overdue item, scar gate refuses a design "
+            "note that names no incident"
         )
     return ok
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
-_KNOWN_FLAGS = {"--check", "--doctrine", "--floors", "--selfcheck", "--help", "-h", "--backflow"}
+_KNOWN_FLAGS = {"--check", "--doctrine", "--floors", "--selfcheck", "--help", "-h",
+                "--backflow", "--designs"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -804,6 +1003,7 @@ def main(argv: list[str] | None = None) -> int:
     doctrine = "DOCTRINE.md"
     floors_root = None
     backflow_path = None
+    designs_root = None
     check_only = "--check" in argv
     positional: list[str] = []
     i = 0
@@ -814,6 +1014,8 @@ def main(argv: list[str] | None = None) -> int:
             floors_root = argv[i + 1]; i += 2
         elif argv[i] == "--backflow":
             backflow_path = argv[i + 1]; i += 2
+        elif argv[i] == "--designs":
+            designs_root = argv[i + 1]; i += 2
         elif argv[i].startswith("--"):
             # An unrecognised flag must NOT be ignored. Silently
             # skipping it means a typo like `--selfchek` runs the
@@ -883,6 +1085,41 @@ def main(argv: list[str] | None = None) -> int:
                      for st in BACKFLOW_STATUSES}
         print(f"[rounds] backflow OK - {len(items)} item(s): "
               + ", ".join(f"{n} {st}" for st, n in by_status.items() if n))
+
+    if designs_root is not None:
+        droot = Path(designs_root)
+        notes = load_design_notes(droot) if droot.exists() else []
+        if not notes:
+            # Not a pass. Asked which incident paid for each mechanism and
+            # given nothing to read, the honest answer is "I did not check",
+            # and 2.9 says that is not the same as "they all passed".
+            missing = "no design notes directory" if not droot.exists() else \
+                      "no design notes"
+            print(f"\n[rounds] {missing} at {droot}. Asked to check the scar "
+                  f"each note cites and found none; nothing was checked.\n")
+            return 2
+        citations: list[ScarCitation] = []
+        try:
+            for note in notes:
+                citations.append(parse_scar(
+                    note.read_text(encoding="utf-8", errors="replace"),
+                    source=str(note),
+                ))
+        except RoundError as exc:
+            print(f"\n[rounds] {exc}\n")
+            return 1
+        known_findings = {f.id for r in rounds for f in r.findings}
+        problems = scar_problems(citations, known_findings)
+        if problems:
+            print(f"\n[rounds] design note(s) cite {len(problems)} finding id(s) "
+                  f"no round record contains\n")
+            print("\n".join(problems))
+            print()
+            return 1
+        on_scars = sum(1 for c in citations if c.findings)
+        on_distribution = sum(1 for c in citations if c.distribution)
+        print(f"[rounds] scars OK - {len(notes)} note(s), {on_scars} cite "
+              f"finding(s), {on_distribution} enter on distribution")
 
     if check_only:
         print(f"[rounds] OK - {len(rounds)} record(s) valid, "

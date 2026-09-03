@@ -1,4 +1,6 @@
 ---
+sutradhar_scar: distribution
+sutradhar_scar_argument: No round record charges the lint scan with a blown envelope. This note exists so the budget gate holds a real number in this repo and adopters read a filled-in example beside the blank template.
 sutradhar_budget: lint-scan
 n: 2000
 n_unit: source files
