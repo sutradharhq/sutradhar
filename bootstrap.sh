@@ -96,6 +96,7 @@ fi
 if want frontend; then
 echo "ui guards:"
 copy "$HERE/js/cypress/uiGuards.ts"             "$TARGET/cypress/support/uiGuards.ts"
+copy "$HERE/js/cypress/uiGuards.selftest.mjs"  "$TARGET/cypress/support/uiGuards.selftest.mjs"
 copy "$HERE/js/cypress/routeSweep.example.cy.ts" "$TARGET/cypress/e2e/routeSweep.example.cy.ts"
 fi
 
@@ -156,6 +157,8 @@ echo "  2d. edit obs_floor.json to your metric names, then: python scripts/obsga
 echo "  2b. prove your next fix's guard is real:"
 echo "      python scripts/verify_guard.py --guard-cmd \"pytest tests/test_the_fix.py\""
 echo "  3. configure uiGuards in cypress/support/e2e.ts and adapt the route sweep"
+echo "     prove the effect digest still sees form state:"
+echo "       node cypress/support/uiGuards.selftest.mjs"
 echo "  4. append AGENTS.sutradhar.md to your CLAUDE.md / AGENTS.md"
 echo "     (or the one-page form: cat agent-packs/CLAUDE-snippet.md >> CLAUDE.md;"
 echo "      Cursor: cp agent-packs/cursor.rules.md .cursorrules)"

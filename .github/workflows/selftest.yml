@@ -107,6 +107,9 @@ jobs:
       - run: |
           npx --yes esbuild js/cypress/uiGuards.ts --loader:.ts=ts --outfile=/dev/null
           npx --yes esbuild js/cypress/routeSweep.example.cy.ts --loader:.ts=ts --outfile=/dev/null
+      # Parsing is not behaviour. readFormState is the dimension expectEffect
+      # was blind to, so it gets executed, not just compiled.
+      - run: node js/cypress/uiGuards.selftest.mjs
 
   bootstrap:
     name: Bootstrap copies a working set

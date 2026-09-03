@@ -24,6 +24,7 @@
  *   - assertNoErrorBoundary - the page rendered rather than crashing
  *   - meaningfulErrors      - nothing threw on the way
  *   - expectEffect          - a control that claims to do something did
+ *   - readFormState         - form value/checked/disabled, which innerText hides
  *   - overprintsIn          - no element paints over its neighbor
  *
  * They are cheap to run over every route, which is the point: breadth
@@ -141,6 +142,68 @@ export function assertNoErrorBoundary(route: string): void {
 }
 
 /**
+ * A digest of every form control's STATE - value, checked, disabled, and the
+ * ARIA equivalents component libraries use instead.
+ *
+ * Split out and exported because it is the dimension `expectEffect` was blind
+ * to for its whole first life, and the blindness was invisible: the other
+ * three dimensions read the URL, `body.innerText`, and storage, and
+ * `innerText` reports NONE of a form's state. Typing into a field and
+ * watching a submit button enable moved nothing any of them could see.
+ *
+ * Both directions of that were wrong. A working control read as broken (a
+ * false red, which gets the assertion deleted), and - the expensive one - a
+ * form that silently did nothing read as fine. Forms are where the money
+ * controls live, so this was the blind spot in the highest-stakes surface.
+ *
+ * The digest is compared, never printed: a failure names the control, not the
+ * field contents, so a password typed by a fixture does not reach CI logs.
+ */
+export function readFormState(doc: Document): string {
+  const SEP = "\u001f";
+  const ROW = "\u001e";
+  const nodes = doc.querySelectorAll(
+    "input, textarea, select, button, [contenteditable], " +
+      "[aria-checked], [aria-selected], [aria-expanded], [aria-disabled]",
+  );
+  return Array.from(nodes)
+    .map((el, i) => {
+      const f = el as HTMLInputElement & HTMLSelectElement;
+      const attr = (n: string) => el.getAttribute(n) ?? "";
+      // `select multiple` reports only its first selection through .value,
+      // so the selected indices are read directly.
+      const selected = f.selectedOptions
+        ? Array.from(f.selectedOptions)
+            .map((o: HTMLOptionElement) => o.value)
+            .join(",")
+        : "";
+      return [
+        String(i),
+        el.tagName,
+        typeof f.type === "string" ? f.type : "",
+        typeof f.value === "string" ? f.value : "",
+        selected,
+        f.checked === true ? "checked" : "",
+        f.disabled === true ? "disabled" : "",
+        attr("aria-checked"),
+        attr("aria-selected"),
+        attr("aria-expanded"),
+        attr("aria-disabled"),
+        (el as HTMLElement).isContentEditable ? el.textContent ?? "" : "",
+      ].join(SEP);
+    })
+    .join(ROW);
+}
+
+/** The dimensions expectEffect watches. Snapshot and comparison are driven
+ *  off this one list so neither can drift out of the other - the half-wiring
+ *  failure (captured but never compared) is unrepresentable rather than
+ *  merely tested for. */
+const EFFECT_DIMENSIONS = ["url", "text", "form", "store"] as const;
+type EffectDimension = (typeof EFFECT_DIMENSIONS)[number];
+type EffectSnapshot = Record<EffectDimension, string>;
+
+/**
  * A control that claims to do something must actually do something.
  *
  * The incidents behind this: a scope picker rendered, opened, accepted a
@@ -150,8 +213,11 @@ export function assertNoErrorBoundary(route: string): void {
  * the control renders - which is what most suites do.
  *
  * expectEffect snapshots the observable world, runs the interaction, and
- * fails if nothing moved. Effects worth counting: the URL, the rendered
- * text, or persisted app state (the keys you configured).
+ * fails if nothing moved. Four dimensions count as movement: the URL, the
+ * rendered text, FORM STATE (see readFormState), and persisted app state
+ * (the keys you configured). Form state was added late and is the reason
+ * this helper can be trusted on a form at all - the first three are all
+ * blind to it.
  *
  * Deliberately OPT-IN per control rather than a sweep that clicks
  * everything on a page: real apps have "Reset", "Retry", and "Delete"
@@ -163,7 +229,6 @@ export function expectEffect(
   interact: () => void,
   opts: { settleMs?: number } = {},
 ): void {
-  const snap = { url: "", text: "", store: "" };
   const readStore = (win: Window): string =>
     config.persistedStateKeys
       .map(
@@ -172,38 +237,39 @@ export function expectEffect(
       )
       .join("||");
 
-  cy.location("href").then((h) => {
-    snap.url = h;
-  });
-  cy.get("body")
-    .invoke("text")
-    .then((t) => {
-      snap.text = t.replace(/\s+/g, " ").trim();
+  const take = (into: Partial<EffectSnapshot>, done: () => void): void => {
+    cy.location("href").then((h) => {
+      into.url = h;
     });
-  cy.window().then((win) => {
-    snap.store = readStore(win);
-  });
-
-  cy.then(() => interact());
-  cy.wait(opts.settleMs ?? 900);
-
-  cy.location("href").then((afterUrl) => {
     cy.get("body")
       .invoke("text")
-      .then((afterTextRaw) => {
-        const afterText = afterTextRaw.replace(/\s+/g, " ").trim();
-        cy.window().then((win) => {
-          const afterStore = readStore(win);
-          const moved =
-            afterUrl !== snap.url ||
-            afterText !== snap.text ||
-            afterStore !== snap.store;
-          expect(
-            moved,
-            `${label} changed nothing - no URL, DOM or persisted-state effect`,
-          ).to.eq(true);
-        });
+      .then((t) => {
+        into.text = t.replace(/\s+/g, " ").trim();
       });
+    cy.document().then((doc) => {
+      into.form = readFormState(doc);
+    });
+    cy.window().then((win) => {
+      into.store = readStore(win);
+      done();
+    });
+  };
+
+  const before: Partial<EffectSnapshot> = {};
+  const after: Partial<EffectSnapshot> = {};
+
+  take(before, () => undefined);
+  cy.then(() => interact());
+  cy.wait(opts.settleMs ?? 900);
+  take(after, () => {
+    const changed = EFFECT_DIMENSIONS.filter((d) => after[d] !== before[d]);
+    expect(
+      changed.length > 0,
+      // Name what WAS checked. "changed nothing" without the list sends the
+      // reader looking for a bug in their control when the real answer may
+      // be that the effect lives somewhere this guard does not look.
+      `${label} changed nothing - none of ${EFFECT_DIMENSIONS.join(", ")} moved`,
+    ).to.eq(true);
   });
 }
 
