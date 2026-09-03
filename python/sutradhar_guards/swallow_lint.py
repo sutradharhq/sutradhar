@@ -39,6 +39,17 @@ import json
 import sys
 from pathlib import Path
 
+# Directory names that are never the adopter's own source. Excluded from the
+# WALK (not from an explicitly named path - see _is_vendor). A guard whose
+# real findings are buried under third-party ones has been switched off by
+# noise rather than by decision: the scar is a repo where ~80 findings inside
+# `.venv` hid the one in `app/`, and the guard was disabled that afternoon.
+VENDOR_DIRS = frozenset({
+    "__pycache__", ".venv", "venv", ".tox", ".nox", "node_modules",
+    "site-packages", ".git", ".hg", ".mypy_cache", ".pytest_cache",
+    ".ruff_cache", ".eggs",
+})
+
 BROAD_TYPES = {"Exception", "BaseException"}
 LOG_METHODS = {"warning", "error", "info", "debug", "exception", "critical", "log"}
 # Function names that make a swallow explicit rather than silent. Extend with
@@ -193,7 +204,29 @@ def _rel(p: Path) -> str:
         return str(p)
 
 
-_KNOWN_FLAGS = {"--allow-call", "--baseline", "--selfcheck", "--update-baseline", "--help", "-h"}
+def _is_vendor(path: Path, root: Path) -> bool:
+    """True when ``path`` sits under a vendor directory BELOW ``root``.
+
+    Judged relative to the root the caller named, so
+    ``swallow_lint.py .venv/pkg`` still scans it - an explicitly named path is
+    always honoured and only the recursive walk excludes. Without that
+    asymmetry, pointing the guard at a vendor tree on purpose would print OK
+    over a directory nothing had read (2.4).
+    """
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        rel = path
+    return any(
+        part in VENDOR_DIRS or part.endswith(".egg-info")
+        for part in rel.parts[:-1]
+    )
+
+
+_KNOWN_FLAGS = {
+    "--allow-call", "--baseline", "--selfcheck", "--update-baseline",
+    "--include-vendor", "--help", "-h",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -203,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if selfcheck() else 1
 
     update = "--update-baseline" in argv
+    include_vendor = "--include-vendor" in argv
     baseline_path = Path("swallow_baseline.json")
     extra_calls: set[str] = set()
     paths: list[Path] = []
@@ -232,13 +266,25 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     py_files: list[Path] = []
+    skipped_vendor = 0
     for root in paths:
         if root.is_file() and root.suffix == ".py":
             py_files.append(root)
-        else:
-            py_files.extend(
-                f for f in root.rglob("*.py") if "__pycache__" not in str(f)
-            )
+            continue
+        for f in root.rglob("*.py"):
+            if not include_vendor and _is_vendor(f, root):
+                skipped_vendor += 1
+                continue
+            py_files.append(f)
+
+    # Say what was NOT read. An exclusion the operator cannot see is the same
+    # class of lie the guard exists to catch: "OK" over an unscanned tree.
+    if skipped_vendor:
+        print(
+            f"[swallow-lint] skipped {skipped_vendor} file(s) under vendor "
+            f"directories ({', '.join(sorted(VENDOR_DIRS)[:4])}, ...); "
+            f"pass --include-vendor to scan them"
+        )
 
     counts: dict[str, int] = {}
     lines_by_file: dict[str, list[int]] = {}
