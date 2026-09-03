@@ -46,6 +46,12 @@ jobs:
         # unenforced budget must be caught) and the real check that
         # every number in docs/design/ has a test behind it.
         run: python python/sutradhar_guards/budget.py docs/design/ --tests python/tests/
+      - name: Backflow register has no undecided item past its round
+        # R7-1: innovations from the build threads used to cross only by
+        # accident, because recording one cost nothing. An item past its
+        # by-round fails here until somebody adopts, rejects, or re-defers it
+        # with a reason. Removing this step restores the original defect.
+        run: python python/sutradhar_guards/rounds.py docs/rounds/ --backflow docs/backflow.md
       - name: Round records are valid (rule ids resolve)
         # A mistyped rule id silently loses the attribution 8.1
         # depends on, and nothing else would ever notice.

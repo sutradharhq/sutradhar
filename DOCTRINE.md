@@ -116,6 +116,24 @@ detector's verdict for every entity at once, under a green status.*
 current value is safe.** The pattern becomes the vulnerability the moment
 someone parameterises it. Enforced mechanically by `interpolation_lint.py`.
 
+**2.9 A check that could not run has not passed.** "Did not fail" and
+"could not measure" are different answers and must be different values.
+Give the third state a name of its own, make it reportable as a rate, and
+have it say what would settle the question. A check whose inconclusive
+result is spelled the same as its pass is off, and looks on. *Scar, and the
+only rule here that four independent build threads each invented separately
+before it reached this file: a quality gate returned `None` both when it
+could not compute a score and when it computed one and failed; the library
+it needed was an optional dependency, so every deployment that lacked it ran
+with the gate silently disabled under a green suite. The other three threads
+arrived at the same shape from different directions - a trigger that reports
+`UNARMED` rather than "not triggered", a verdict of `INSUFFICIENT_EVIDENCE`
+that names the evidence that would resolve it, and a refusal rate published
+alongside the pass rate. Convergence at that width is the strongest evidence
+8.1 accepts.* This is 2.4 turned on the instrument: the guards must degrade
+as honestly as the systems they watch, and the failure is quieter here
+because a silent check produces no incident to investigate.
+
 ## 3. Frontend
 
 **3.1 Every interactive control has an asserted effect.** A click must
