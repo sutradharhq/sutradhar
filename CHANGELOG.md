@@ -7,6 +7,44 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Two defects reported by the threads that use this, and the mechanism that
+should have carried them here sooner** (round 14; register:
+[docs/backflow.md](docs/backflow.md)).
+
+- **`expectEffect` was blind to form state.** It compared the URL,
+  `body.innerText`, and configured storage keys - and `innerText` reports
+  neither an input's value nor a button's `disabled` attribute. Typing into a
+  field and watching a submit button enable moved nothing it could see: a
+  false red on a working control, and the expensive inverse, a silent pass
+  over a form that did nothing. New exported `readFormState` covers value,
+  checked, disabled, the `aria-*` equivalents, multi-select selections, and
+  contenteditable text. Snapshot and comparison are driven off one
+  `EFFECT_DIMENSIONS` list, so a dimension captured but never compared is no
+  longer representable. **Breaking for anyone who monkey-patched the internal
+  snapshot shape**; the public signature is unchanged.
+- **`js/cypress/uiGuards.selftest.mjs`** (new): compiles the real shipped
+  source with esbuild and runs it against a DOM stub. The load-bearing case is
+  two documents with identical body text and different form state. It exits 2,
+  not 0, when it cannot run.
+- **`swallow_lint.py` no longer walks vendor trees.** The only exclusion was
+  `__pycache__`, so a project-root scan descended into `.venv` and buried the
+  real finding under third-party ones. The walk now skips vendor directories,
+  **reports how many files it skipped** and how to override
+  (`--include-vendor`), and still scans an explicitly named path regardless.
+  `build`, `dist` and `env` are deliberately not excluded - they are real
+  package names, and a too-greedy exclusion is the same defect inverted.
+  **Adopters should re-run `--update-baseline`**: a baseline recorded over a
+  vendor tree will now show those files as improved.
+- **Doctrine 2.9** (new): *a check that could not run has not passed.* The only
+  rule here that four independent build threads each invented separately
+  before it reached this file.
+- **`rounds.py --backflow <register>`** (new): gates a backflow register.
+  An item past its `by-round` and still `owed` or `deferred` fails until
+  somebody adopts it, rejects it with a reason, or re-defers it with a reason.
+  `practice` evidence (a documented intention) may strengthen an existing
+  scarred rule's mechanism but may not found a new rule - 8.1, enforced.
+  Closes R7-1, high and deferred since round 7.
+
 **The guards become tools an agent calls MID-task** (round 13; design note:
 [docs/design/mcp-server.md](docs/design/mcp-server.md)). Every guard here
 runs in CI, which is to say after the agent has stopped. `mcp_server.py` is

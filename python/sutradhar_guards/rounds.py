@@ -74,6 +74,23 @@ SEVERITIES = ("high", "med", "low")
 STATUSES = ("fixed", "deferred", "closed", "retracted")
 COLUMNS = ("id", "severity", "rule", "found-by", "status", "summary")
 
+# ── backflow register ───────────────────────────────────────────────────────
+# Doctrine distilled from several independent builds goes stale in one
+# direction: the threads keep inventing, and nothing carries the inventions
+# home. Four threads independently solved problems the doctrine still listed
+# as open, and every crossing that did happen was a side-effect of somebody
+# building a tool, never a decision. The register makes an unmoved item cost
+# something: an entry past its by-round fails the gate until somebody adopts
+# it, rejects it with a reason, or re-defers it to a new round with a reason.
+BACKFLOW_STATUSES = ("owed", "adopted", "rejected", "deferred")
+# 8.1: a rule enters with the incident that paid for it. A documented
+# intention is not an incident, so `practice` items may strengthen the
+# mechanism of a rule that already has a scar - they may not found a new one.
+BACKFLOW_EVIDENCE = ("scar", "practice")
+BACKFLOW_COLUMNS = (
+    "id", "source", "what", "evidence", "rule", "status", "by-round", "note",
+)
+
 _HEADING = re.compile(r"^#\s+Round\s+(\d+)\s*[-–—]\s*(\d{4}-\d{2}-\d{2})\s*$",
                       re.MULTILINE)
 _LENSES = re.compile(r"^Lenses:\s*(.+)$", re.IGNORECASE)
@@ -211,6 +228,140 @@ def load_rounds(root: str | Path) -> list[Round]:
             f"numbers order the history; a duplicate makes the trend a lie."
         )
     return sorted(rounds, key=lambda r: r.number)
+
+
+@dataclass
+class BackflowItem:
+    id: str
+    source: str
+    what: str
+    evidence: str      # "scar" | "practice"
+    rule: str          # a doctrine rule id, or "new" for a proposed rule
+    status: str
+    by_round: int
+    note: str
+
+
+BACKFLOW_HEADING = "## The register"
+
+
+def parse_backflow(text: str, source: str = "") -> list[BackflowItem]:
+    """Parse the backflow register. Refuses what it cannot read exactly.
+
+    Only the table under `## The register` is read, so the explanatory tables
+    above it are not mistaken for entries - and, more importantly, so a
+    malformed row inside the register can be REFUSED rather than skipped. An
+    earlier draft skipped any row without exactly eight cells; the first real
+    register written against it contained a note with an escaped pipe, the row
+    split into nine, and the item vanished while the gate printed OK. That is
+    2.9 in the instrument itself: "cannot read this row" was spelled the same
+    as "no row here".
+    """
+    items: list[BackflowItem] = []
+    seen: set[str] = set()
+    where = f" in {source}" if source else ""
+    if BACKFLOW_HEADING not in text:
+        raise RoundError(
+            f"no {BACKFLOW_HEADING!r} heading{where}. The register table must "
+            f"live under it so a malformed row can be told from prose."
+        )
+    body = text.split(BACKFLOW_HEADING, 1)[1]
+    for line in body.splitlines():
+        st = line.strip()
+        if not st.startswith("|"):
+            continue
+        cells = _split_row(st)
+        low = [c.lower() for c in cells]
+        if low == list(BACKFLOW_COLUMNS):
+            continue
+        if set("".join(cells)) <= set("-: "):
+            continue  # the markdown separator row
+        if len(cells) != len(BACKFLOW_COLUMNS):
+            raise RoundError(
+                f"register row{where} has {len(cells)} cell(s), expected "
+                f"{len(BACKFLOW_COLUMNS)}: {st[:90]!r}\n  A pipe inside a "
+                f"note splits the row. Rewrite the note without it - escaping "
+                f"it as \\| does not help, the cell split happens first."
+            )
+        cid, src, what, evidence, rule, status, by_round, note = cells
+        if not re.fullmatch(r"B-\d+", cid):
+            raise RoundError(
+                f"backflow id {cid!r}{where} is not of the form B-<n>."
+            )
+        if cid in seen:
+            raise RoundError(f"backflow id {cid!r} appears twice{where}.")
+        seen.add(cid)
+        if status.lower() not in BACKFLOW_STATUSES:
+            raise RoundError(
+                f"{cid}{where}: status {status!r} is not one of "
+                f"{', '.join(BACKFLOW_STATUSES)}."
+            )
+        if evidence.lower() not in BACKFLOW_EVIDENCE:
+            raise RoundError(
+                f"{cid}{where}: evidence {evidence!r} is not one of "
+                f"{', '.join(BACKFLOW_EVIDENCE)}. `scar` means an incident "
+                f"with a recorded cost; `practice` means a documented "
+                f"intention. The distinction is what keeps 8.1 honest."
+            )
+        try:
+            n = int(by_round)
+        except ValueError:
+            raise RoundError(
+                f"{cid}{where}: by-round {by_round!r} is not a round number. "
+                f"An item with no deadline is a wish, and this register "
+                f"exists because wishes do not move."
+            ) from None
+        items.append(BackflowItem(
+            cid, src, what, evidence.lower(), rule, status.lower(), n, note,
+        ))
+    return items
+
+
+def backflow_problems(
+    items: list[BackflowItem], latest_round: int, all_rules: set[str],
+) -> list[str]:
+    """Everything wrong with the register, as lines a reader can act on.
+
+    This is the mechanism R7-1 asked for. Recording an owed item is not the
+    hard part - the hard part is that recording it costs nothing, so it sits.
+    Here an item past its by-round fails the gate, and the only ways out are
+    decisions: adopt it, reject it with a reason, or re-defer it to a new
+    round with a reason.
+    """
+    problems: list[str] = []
+    for it in items:
+        if it.status in ("owed", "deferred") and it.by_round <= latest_round:
+            problems.append(
+                f"  {it.id} ({it.source}): {it.status} since round "
+                f"{it.by_round}, and round {latest_round} is recorded. "
+                f"Decide it - adopt, reject with a reason, or re-defer to a "
+                f"later round with a reason.\n      {it.what}"
+            )
+        if it.status in ("rejected", "deferred") and not it.note.strip("- "):
+            problems.append(
+                f"  {it.id}: {it.status} with no reason. 7.4 - an unrecorded "
+                f"dead end gets re-explored at full price."
+            )
+        if it.status == "adopted":
+            if it.rule.lower() in ("", "-", "new"):
+                problems.append(
+                    f"  {it.id}: adopted but cites no doctrine rule. An "
+                    f"adoption that landed nowhere is not an adoption."
+                )
+            elif all_rules and it.rule not in all_rules:
+                problems.append(
+                    f"  {it.id}: adopted against rule {it.rule}, which is not "
+                    f"in the doctrine."
+                )
+        if it.evidence == "practice" and it.rule.lower() == "new":
+            problems.append(
+                f"  {it.id}: `practice` evidence proposed as a NEW rule. "
+                f"8.1 - a rule enters with the incident that paid for it, and "
+                f"a documented intention is not an incident. A practice item "
+                f"may strengthen the mechanism of a rule that already has a "
+                f"scar; cite that rule instead."
+            )
+    return problems
 
 
 def doctrine_rule_ids(path: str | Path) -> set[str]:
@@ -592,17 +743,54 @@ def _selfcheck_body() -> bool:
             ok = False
         except RoundError:
             pass
+
+        # ── the backflow gate ────────────────────────────────────────────
+        # Planted known-bad cases, because the gate's whole value is that an
+        # undecided item eventually costs something. A gate that always
+        # answered OK would restore R7-1 exactly.
+        head = ("## The register\n\n| " + " | ".join(BACKFLOW_COLUMNS) +
+                " |\n|" + "|".join(["---"] * len(BACKFLOW_COLUMNS)) + "|\n")
+
+        def _bf(row: str) -> list[BackflowItem]:
+            return parse_backflow(head + row + "\n")
+
+        overdue = _bf("| B-1 | T | a thing | scar | 2.1 | owed | 5 | |")
+        if not backflow_problems(overdue, latest_round=5, all_rules={"2.1"}):
+            print("[rounds] SELFCHECK FAILED: an item owed past its round "
+                  "did not fail the gate", file=sys.stderr)
+            ok = False
+        if backflow_problems(overdue, latest_round=4, all_rules={"2.1"}):
+            print("[rounds] SELFCHECK FAILED: an item not yet due was "
+                  "reported as overdue", file=sys.stderr)
+            ok = False
+
+        founding = _bf("| B-1 | T | a thing | practice | new | owed | 99 | |")
+        if not backflow_problems(founding, latest_round=1, all_rules=set()):
+            print("[rounds] SELFCHECK FAILED: a `practice` item was allowed "
+                  "to found a new rule (8.1)", file=sys.stderr)
+            ok = False
+
+        # A row it cannot read must be refused, never skipped (2.9).
+        try:
+            _bf("| B-1 | T | a | b | thing | scar | 2.1 | owed | 99 | |")
+            print("[rounds] SELFCHECK FAILED: a malformed register row was "
+                  "skipped instead of refused", file=sys.stderr)
+            ok = False
+        except RoundError:
+            pass
+
     if ok:
         print(
             "[rounds] selfcheck ok: records parsed, stop rule converges, residual "
-            "register held, attribution refused below the evidence floor"
+            "register held, attribution refused below the evidence floor, "
+            "backflow gate bites on an overdue item"
         )
     return ok
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
-_KNOWN_FLAGS = {"--check", "--doctrine", "--floors", "--selfcheck", "--help", "-h"}
+_KNOWN_FLAGS = {"--check", "--doctrine", "--floors", "--selfcheck", "--help", "-h", "--backflow"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -615,6 +803,7 @@ def main(argv: list[str] | None = None) -> int:
 
     doctrine = "DOCTRINE.md"
     floors_root = None
+    backflow_path = None
     check_only = "--check" in argv
     positional: list[str] = []
     i = 0
@@ -623,6 +812,8 @@ def main(argv: list[str] | None = None) -> int:
             doctrine = argv[i + 1]; i += 2
         elif argv[i] == "--floors":
             floors_root = argv[i + 1]; i += 2
+        elif argv[i] == "--backflow":
+            backflow_path = argv[i + 1]; i += 2
         elif argv[i].startswith("--"):
             # An unrecognised flag must NOT be ignored. Silently
             # skipping it means a typo like `--selfchek` runs the
@@ -660,6 +851,38 @@ def main(argv: list[str] | None = None) -> int:
               f"{', '.join(unknown)}.\n  A mistyped rule id silently loses the "
               f"attribution 8.1 depends on.\n")
         return 1
+
+    if backflow_path is not None:
+        bf = Path(backflow_path)
+        if not bf.exists():
+            # Not a pass. A register that is not there has told us nothing
+            # about what is owed - the same silence as a register full of
+            # undecided items, which is what this gate exists to break.
+            print(f"\n[rounds] no backflow register at {bf}. Asked to check "
+                  f"one and found none; nothing was checked.\n")
+            return 2
+        try:
+            items = parse_backflow(bf.read_text(encoding="utf-8"), source=str(bf))
+        except RoundError as exc:
+            print(f"\n[rounds] {exc}\n")
+            return 1
+        if not items:
+            print(f"\n[rounds] {bf} has no register rows. An empty register "
+                  f"and a satisfied one look identical from here, so this is "
+                  f"a refusal rather than a pass.\n")
+            return 2
+        latest = max(r.number for r in rounds)
+        problems = backflow_problems(items, latest, all_rules)
+        if problems:
+            print(f"\n[rounds] backflow register: {len(problems)} item(s) "
+                  f"need a decision\n")
+            print("\n".join(problems))
+            print()
+            return 1
+        by_status = {st: sum(1 for i in items if i.status == st)
+                     for st in BACKFLOW_STATUSES}
+        print(f"[rounds] backflow OK - {len(items)} item(s): "
+              + ", ".join(f"{n} {st}" for st, n in by_status.items() if n))
 
     if check_only:
         print(f"[rounds] OK - {len(rounds)} record(s) valid, "
