@@ -184,7 +184,7 @@ parity before shipping.
 **4.3 Schema-validate every structured output** with bounded corrective
 retries. A model response is untrusted input.
 
-**4.4 Budget tokens like memory.** Per-surface caps, metered and surfaced.
+**4.4 Budget tokens like memory.** Per-surface and per-tenant caps, metered and surfaced.
 Usage-priced dependencies without budgets are unbounded liabilities.
 
 **4.5 Human review is non-overridable for consequential artifacts.** Where
@@ -199,7 +199,7 @@ config) so any generated artifact can be re-derived and disputed later. The anch
 **5.1 Every published figure carries its provenance tier** (measured,
 estimated with stated assumptions, or illustrative) in the artifact itself,
 not in the author's head. A scenario presented as a measurement is a lie
-with extra steps. The tier is per value, not per artifact: a derived value carries the weakest tier among its inputs, never the strongest, and a value with no witnessed source carries a gap marker, not a guess. *Scar: B-7 and B-12 - two threads built per-value tiers, one with an explicit gap tag, because one label on the whole artifact could not say which numbers inside it were real.* A published number is withdrawn only by a retraction published with the same provenance, never by a silent edit; retraction is a status of its own, and the number it replaces stays visible as retracted. *Scar: an RCA retracted eight already-promoted results, and nothing in this section had a name for what had just happened (B-10).*
+with extra steps. The tier is per value, not per artifact: a derived value carries the weakest tier among its inputs, never the strongest, and a value with no witnessed source carries a gap marker, not a guess. *Scar: B-7 and B-12 - two threads built per-value tiers, one with an explicit gap tag, because one label on the whole artifact could not say which numbers inside it were real.* A published number is withdrawn only by a retraction published with the same provenance, never by a silent edit; retraction is a status of its own, and the number it replaces stays visible as retracted. *Scar: an RCA retracted eight already-promoted results, and nothing in this section had a name for what had just happened (B-10).* A number read off a surface that was not witnessed is not measured, whatever its decimal places suggest (see 6.6).
 
 **5.2 Sell the method, not the demo numbers.** Synthetic-corpus results
 never leave as evidence. The first real deployment converts scenario rows to
@@ -247,7 +247,7 @@ verification read a queryable proxy three times while the surface a person
 actually saw disagreed throughout (round 3); a review read exit 0 from five
 tools whose selfchecks did not exist - the process terminated, nothing was
 witnessed, and the zero was reported as a pass (round 4). Both times the
-proxy agreed, so the looking stopped.* A job's success carries its output count: a run that succeeds and produces nothing is a failure unless zero was declared expected, so the floor for a job is rows-per-run, not only fired-succeeded-failed. *Scar: a training loop ran thirty days at zero rows under green status, because the job counter could not tell a silent zero from a full run (B-4).*
+proxy agreed, so the looking stopped.* A job's success carries its output count: a run that succeeds and produces nothing is a failure unless zero was declared expected, so the floor for a job is rows-per-run, not only fired-succeeded-failed. *Scar: a training loop ran thirty days at zero rows under green status, because the job counter could not tell a silent zero from a full run (B-4).* Everything past this line - dashboards, tracing, alerting, SLOs - stays out of the doctrine until an incident pays its way in.
 
 **6.7 An exit code is not a witness.** It is a claim about a process, not
 about a check. It is evidence only in pairs: a known-good input exits 0 AND a
@@ -325,7 +325,7 @@ save from in months is deleted.
 
 **8.2 Deletion is a discipline.** Guards, tests, services, and rules accrete
 by default; schedule pruning. Great systems subtract. *(The 1,400-point-pins
-lesson lives here.)*
+lesson lives here.)* The commonest form is a function with a test and no product: when a guard goes red over an unused helper, delete the helper, not the assertion. A test is not a caller, and dead code with a test has an alibi.
 
 **8.3 Have a stop rule.** Engineer time is a budget. When the marginal round
 of any loop (hardening, polishing, testing) yields less than the next
