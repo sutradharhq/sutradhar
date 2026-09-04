@@ -640,18 +640,25 @@ def test_hooks_json_matches_the_documented_schema():
                 assert script.is_file(), f"{event} points at a missing {script}"
 
 
-def test_mcp_json_points_at_the_one_server(tmp_path: Path):
+def test_mcp_json_points_inside_the_plugin(tmp_path: Path):
+    """It used to point at `${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards`
+    - referenced, not copied, so there would be one server and one version.
+
+    That was right about the risk and wrong about the mechanism. An
+    installed plugin is copied into `~/.claude/plugins/cache` WITHOUT the
+    files around it, so `../` resolved from a checkout and would simply not
+    exist after a marketplace install (R16-1). The server is now bundled,
+    and the second-answer risk is answered by
+    `test_plugin_bundle.py`, which fails on a one-byte divergence.
+    """
     config = json.loads((PLUGIN / ".mcp.json").read_text())
     server = config["mcpServers"]["sutradhar-guards"]
     target = server["args"][0]
     assert target.startswith("${CLAUDE_PLUGIN_ROOT}/")
+    assert "/.." not in target, target
     resolved = (PLUGIN / target.split("}/", 1)[1]).resolve()
     assert resolved.is_file()
-    # Referenced, not copied: one server, one version. A copy would be a
-    # second answer to "what does verify_guard do", and the first time they
-    # disagreed the copy would win silently.
-    assert resolved == (REPO_ROOT / "python" / "sutradhar_guards"
-                        / "mcp_server.py").resolve()
+    assert PLUGIN.resolve() in resolved.parents
 
 
 def test_plugin_manifest_is_where_the_docs_say_it_is():
