@@ -51,6 +51,7 @@ from sutradhar_guards.mcp_server import (
     PARSE_ERROR,
     SUPPORTED_VERSIONS,
     TOOLS,
+    TOOLS_LIST_MAX_BYTES,
     UNSUPPORTED_PROTOCOL_VERSION,
     cap_output,
 )
@@ -567,6 +568,87 @@ def test_output_cap_truncates_and_says_so(server, tmp_path):
     assert f"{sc['stdout_total_bytes']:,}" in text, (
         "the truncation notice does not say how much was withheld, so the "
         "agent cannot tell a long list from a capped one")
+
+
+def test_output_cap_truncation_notice_names_a_file_with_the_whole_output(
+        server, tmp_path):
+    """R16-4. Truncation stays stated - and stops being a loss.
+
+    "Re-run the command in a shell" was the old advice, and it is advice the
+    caller may not be able to take: the guard ran here, in this cwd, under
+    this timeout. The full output is written to a file and the notice names
+    it, so the cut costs a `cat` rather than a repeat.
+    """
+    big = tmp_path / "big"
+    big.mkdir()
+    lines = ["def q(conn, v):", "    return ["]
+    lines += [f"        f'SELECT * FROM t{i} WHERE n = \"{{v}}\"'," for i in range(2500)]
+    lines += ["    ]", ""]
+    (big / "big.py").write_text("\n".join(lines))
+
+    res = server.call_tool("interpolation_lint",
+                           {"paths": [str(big)], "keywords": "sql"})
+    sc = res["result"]["structuredContent"]
+    assert sc["stdout_truncated"] is True, (
+        "the fixture did not exceed the cap; this test would pass vacuously")
+
+    text = res["result"]["content"][0]["text"]
+    spilled = sc["output_spill_path"]
+    assert spilled, "no spill path in the result"
+    assert spilled in text, (
+        "the truncation notice does not name the file, so a reader is told "
+        "the output is incomplete and not told where the rest is")
+
+    path = Path(spilled)
+    assert path.is_file(), f"the notice names {path}, which does not exist"
+    full = path.read_text(encoding="utf-8")
+    assert len(full.encode("utf-8")) == sc["stdout_total_bytes"] + sc["stderr_total_bytes"], (
+        "the spilled file is not the whole output the guard produced")
+    assert full.startswith(sc["stdout"][:200]), "the spill is not this call's output"
+    path.unlink()
+
+
+def test_tool_schemas_fit_a_token_budget(server):
+    """R16-4, over the real transport rather than over the table.
+
+    `tools/list` is spent from the caller's context in EVERY session, called
+    or not: measured at 20,718 bytes (~5,200 tokens) before this round, with
+    no number and no test on it - doctrine 1.1 applied to the resource an
+    agent actually runs out of. The ceiling and the measurement are recorded
+    in docs/design/mcp-server.md.
+
+    Asserted on the serialised response, not on `public_tools()`, because
+    the bytes that cost anything are the ones that cross the pipe.
+    """
+    listed = server.request("tools/list")["result"]["tools"]
+    size = len(json.dumps(listed))
+    assert size <= TOOLS_LIST_MAX_BYTES, (
+        f"tools/list serialises to {size:,} bytes, over the declared "
+        f"{TOOLS_LIST_MAX_BYTES:,}. Every session pays it whether or not a "
+        f"tool is called.")
+    # ...and it still says the things a caller cannot work without.
+    by_name = {t["name"]: t for t in listed}
+    assert set(by_name) == {t["name"] for t in TOOLS}, "a tool went missing"
+    for tool in listed:
+        assert tool["description"].strip(), f"{tool['name']} has no description"
+        assert tool["inputSchema"]["type"] == "object"
+    warning = by_name["verify_guard"]["description"]
+    assert warning.startswith("WARNING:"), warning[:80]
+    for fact in ("as the current user", "not a linter", "do not allowlist",
+                 "VERIFIED", "DECORATION", "INCONCLUSIVE"):
+        assert fact in warning, f"the diet dropped {fact!r} from verify_guard"
+
+
+def test_the_schema_ceiling_matches_the_design_note():
+    """Pin the mirror between the note and the constant, so a change to
+    either fails rather than letting the documented budget drift away from
+    the enforced one."""
+    note = (DESIGN / "mcp-server.md").read_text(encoding="utf-8")
+    declared = {int(m.replace(",", "")) for m in
+                re.findall(r"([\d,]{4,})\s*\(`TOOLS_LIST_MAX_BYTES`\)", note)}
+    assert TOOLS_LIST_MAX_BYTES in declared, (
+        f"docs/design/mcp-server.md declares {sorted(declared)} as the "
+        f"tools/list ceiling; the code enforces {TOOLS_LIST_MAX_BYTES}")
 
 
 def test_output_cap_matches_the_design_note():

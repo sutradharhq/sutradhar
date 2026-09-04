@@ -151,7 +151,8 @@ happened to guess.
 | protocol round trips in one server process | 200 | `test_mcp_roundtrip_holds_its_declared_envelope` |
 | wall clock for those 200 round trips | 300 ms (x2 CI slack) | same |
 | peak Python heap across them | 8 MB (x2 CI slack) | same |
-| captured bytes per stream per tool call | 65,536 (`MAX_OUTPUT_BYTES`) | `test_output_cap_truncates_and_says_so`, `test_output_cap_matches_the_design_note` |
+| captured bytes per stream per tool call | 8,192 (`MAX_OUTPUT_BYTES`) | `test_output_cap_truncates_and_says_so`, `test_output_cap_matches_the_design_note` |
+| serialised `tools/list` payload | 8,192 (`TOOLS_LIST_MAX_BYTES`) | `test_tool_schemas_fit_a_token_budget` |
 
 **Provenance of these numbers** (doctrine 5.1). The ceilings are *chosen*;
 the baseline behind them is *measured*, and the measurement had to be taken
@@ -211,12 +212,37 @@ with thousands of baselined swallows, `interpolation_lint` on a monorepo.
 An MCP tool result goes straight into a model's context window, so an
 uncapped result is the doctrine 2.6 unbounded-read class with a new and
 more expensive consumer: it does not OOM a store, it evicts the agent's
-working memory and costs real money doing it. Each stream is capped at
-64 KiB, and **truncation is stated, never silent**: the text block carries a
-`[truncated: N of M bytes]` marker and `structuredContent` carries
-`stdout_truncated` / `stdout_total_bytes`. A silently truncated guard
-report is worse than no report, because the agent reads a partial finding
-list as a complete one.
+working memory and costs real money doing it. Each stream is capped, and
+**truncation is stated, never silent**: the text block carries a
+`[TRUNCATED: showing N of M bytes ...]` marker and `structuredContent`
+carries `stdout_truncated` / `stdout_total_bytes`. A silently truncated
+guard report is worse than no report, because the agent reads a partial
+finding list as a complete one.
+
+**Round 16 lowered the cap from 65,536 to 8,192** and stopped losing
+anything by it (R16-4). 64 KiB per stream is ~16k tokens of a caller's
+context for a single call, worst case, which is the same unbounded-read
+class one layer up; 8,192 is the figure `_hooklib` already uses for a hook's
+denial reason. What no longer fits is not discarded: the full stdout+stderr
+of a truncated call is written to
+`<tempdir>/sutradhar-mcp/<tool>-<timestamp>.txt`, the truncation notice
+names that path, and `structuredContent.output_spill_path` carries it for a
+caller that would rather not parse prose. Under the system temp directory,
+never the repository — a tool with side effects in somebody's working tree
+is a merge conflict waiting for a bad afternoon. If the file cannot be
+written, the notice says so instead of naming a file that is not there.
+
+**`TOOLS_LIST_MAX_BYTES` is the fifth**, and it is the one this note did not
+have. The nine tool schemas were **measured at 20,718 bytes — roughly 5,200
+tokens — spent in every session whether or not a tool is ever called**. That
+is doctrine 1.1 applied to the resource an agent actually runs out of, and
+it had no number and no test. Round 16 cut it to **7,270 bytes** by deleting
+repetition rather than facts: the shared `_REPO` and `_TIMEOUT` argument
+descriptions, and the per-field description of a result object that is
+identical for all nine tools, now appear ONCE in the server's
+`instructions` (sent at `initialize` / `server/discover`) instead of nine
+times in `tools/list`. The warning on `verify_guard`, each tool's
+verdict list, and the result-versus-error partition all stay.
 
 ## Failure story <!-- doctrine 1.4 -->
 

@@ -67,6 +67,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -97,9 +98,51 @@ UNSUPPORTED_PROTOCOL_VERSION = -32022
 #: Captured bytes per stream per tool call. Declared in
 #: docs/design/mcp-server.md, which `test_output_cap_matches_the_design_note`
 #: pins to this constant so the note and the code cannot drift apart.
-MAX_OUTPUT_BYTES = 65536
+#:
+#: 65,536 was ~16k tokens of a caller's context per call, worst case, which
+#: is the doctrine 2.6 unbounded-read class charged to the most expensive
+#: consumer there is (R16-4). 8,192 is the same figure `_hooklib` already
+#: uses for a hook's denial reason. Nothing is lost by the cut: what does not
+#: fit is written to a file and the truncation notice names it, so the whole
+#: output is still one `cat` away instead of one re-run away.
+MAX_OUTPUT_BYTES = 8192
+
+#: Ceiling on the serialised `tools/list` payload. Every session pays this
+#: whether or not a tool is ever called, so it is a budget and not a
+#: preference: nine long descriptions plus nine full input and output schemas
+#: measured 20,718 bytes - roughly 5,200 tokens - before round 16 (R16-4).
+#: Declared in docs/design/agent-loop-hooks.md and enforced over the real
+#: transport by `test_tool_schemas_fit_a_token_budget`.
+TOOLS_LIST_MAX_BYTES = 8192
+
+#: Where a truncated call's FULL output is written. Under the system temp
+#: directory, never the user's repository - a tool with side effects in
+#: somebody's working tree is a merge conflict waiting for a bad afternoon.
+SPILL_DIR_NAME = "sutradhar-mcp"
 
 _KNOWN_FLAGS = {"--selfcheck", "--help", "-h"}
+
+#: Sent once per session (by `initialize` and by `server/discover`), which is
+#: why the facts every tool shares live here rather than nine times over in
+#: the tool schemas (R16-4).
+INSTRUCTIONS = (
+    "Sutradhar's guards, callable mid-task. A RED verdict is a normal RESULT, "
+    "not an error: read `structuredContent.verdict`. A JSON-RPC error from "
+    "this server means the guard could not be run at all, so nothing was "
+    "measured and nothing is claimed about your code.\n"
+    "Every tool result's `structuredContent` carries: `tool` and `verdict` "
+    "(strings), `ok` (boolean - true only when the guard found nothing), "
+    "`exit_code` (integer), `command` and `cwd` (strings), `duration_ms` "
+    "(integer), `stdout` and `stderr` (strings), `stdout_truncated` / "
+    "`stderr_truncated` (booleans), `stdout_total_bytes` / "
+    "`stderr_total_bytes` / `output_cap_bytes` (integers), and "
+    "`output_spill_path` (string or null). Output is capped per stream; when "
+    "it is cut, the text block says so and `output_spill_path` names a file "
+    "holding the whole of that call's output.\n"
+    "Every tool takes an optional `repo` (working directory, which must be "
+    "inside this server's own repository) and `timeout_s` (seconds before the "
+    "guard is killed, which is an instrument failure and never a verdict)."
+)
 
 
 class RpcError(Exception):
@@ -158,16 +201,38 @@ def cap_output(raw: str, limit: int = MAX_OUTPUT_BYTES) -> tuple[str, bool, int]
     return data[:limit].decode("utf-8", errors="ignore"), True, total
 
 
-def _render_stream(name: str, text: str, truncated: bool, total: int) -> str:
+def spill(tool: str, full: str) -> str:
+    """Write the complete output somewhere a person can read it.
+
+    Returns the path, or a sentence saying why there isn't one. Truncation is
+    stated either way: a notice that promises a file which does not exist is
+    worse than a notice that says the file could not be written, because the
+    first sends the reader looking.
+    """
+    try:
+        base = Path(tempfile.gettempdir()) / SPILL_DIR_NAME
+        base.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%S") + f"-{int(time.time() * 1e6) % 1000000:06d}"
+        path = base / f"{tool}-{stamp}.txt"
+        path.write_text(full, encoding="utf-8", errors="replace")
+        return str(path)
+    except OSError as exc:
+        return f"(not written: {type(exc).__name__}: {exc})"
+
+
+def _render_stream(name: str, text: str, truncated: bool, total: int,
+                   spilled: str = "") -> str:
     if not text and not truncated:
         return ""
     head = f"--- {name} ---\n{text}"
     if truncated:
         head += (
             f"\n[TRUNCATED: showing {len(text.encode('utf-8', 'replace')):,} of "
-            f"{total:,} bytes. This {name} is INCOMPLETE - re-run the command "
-            f"in a shell to see all of it.]"
+            f"{total:,} bytes. This {name} is INCOMPLETE."
         )
+        head += (f" The FULL stdout+stderr of this call is at {spilled}]"
+                 if spilled else
+                 " Re-run the command in a shell to see all of it.]")
     return head
 
 
@@ -231,44 +296,22 @@ def _bool(args: dict, key: str, *, default: bool = False) -> bool:
 # There is no default - a tool added without one fails a class ratchet,
 # because the partition is the thing most likely to be wrong.
 
-_REPO = {
-    "type": "string",
-    "description": "Working directory to run the guard in. Other relative "
-                   "paths resolve against it. Defaults to the server's cwd.",
-}
-_TIMEOUT = {
-    "type": "integer",
-    "description": "Seconds before the guard is killed and an instrument "
-                   "failure is reported (never a verdict).",
-}
+# Every byte of these is repeated nine times in `tools/list`, and that
+# payload is spent out of the caller's context window on every session
+# whether or not a tool is ever called (R16-4). So the descriptions here are
+# written to the same standard as the guards' own output: say the thing, and
+# stop. Rhetoric costs tokens nine times over.
+_REPO = {"type": "string"}
+_TIMEOUT = {"type": "integer"}
 
+#: What `structuredContent` GUARANTEES. This object is serialised once per
+#: tool - nine times in every `tools/list` - so it carries the claim a caller
+#: cannot do without (these three fields are always present) and leaves the
+#: field-by-field description to the server's `instructions`, which are sent
+#: once. Repetition is the expensive part of a schema (R16-4).
 _OUTPUT_SCHEMA = {
     "type": "object",
-    "properties": {
-        "tool": {"type": "string"},
-        "verdict": {"type": "string",
-                    "description": "The guard's answer, e.g. VERIFIED, "
-                                   "DECORATION, INCONCLUSIVE, OK, FINDINGS."},
-        "ok": {"type": "boolean",
-               "description": "True only when the guard found nothing to "
-                              "report. False is a finding, not an error."},
-        "exit_code": {"type": "integer"},
-        "command": {"type": "string", "description": "The exact shell command "
-                                                     "that produced this."},
-        "cwd": {"type": "string"},
-        "duration_ms": {"type": "integer"},
-        "stdout": {"type": "string"},
-        "stdout_truncated": {"type": "boolean"},
-        "stdout_total_bytes": {"type": "integer"},
-        "stderr": {"type": "string"},
-        "stderr_truncated": {"type": "boolean"},
-        "stderr_total_bytes": {"type": "integer"},
-        "output_cap_bytes": {"type": "integer"},
-    },
-    "required": ["tool", "verdict", "ok", "exit_code", "command",
-                 "stdout", "stdout_truncated", "stdout_total_bytes",
-                 "stderr", "stderr_truncated", "stderr_total_bytes",
-                 "output_cap_bytes"],
+    "required": ["verdict", "ok", "exit_code"],
 }
 
 
@@ -356,31 +399,22 @@ def _argv_framework_only(a: dict) -> list[str]:
     return argv
 
 
+_PATHS = {"type": "array", "items": {"type": "string"}}
+
 TOOLS: tuple[dict, ...] = (
     {
         "name": "verify_guard",
         "title": "Prove a guard can fail",
         "module": "verify_guard",
         "description": (
-            "WARNING: this tool RUNS the command you give it, on this machine, "
-            "as the user running this server, with their environment and network "
-            "access. It is a test runner, not a linter. Do not put it on an "
-            "allowlist, and do not call it with a command you would not type "
-            "into that user's shell yourself. The command is spawned as one "
-            "program with arguments (optionally prefixed by `cd <dir> &&`), "
-            "never through a shell: pipes, redirection, `;`, backticks and "
-            "$(...) are REFUSED as INCONCLUSIVE, so put anything more complex "
-            "in a script and name the script.\n"
-            "Mechanise doctrine 2.2: revert the fix, and the guard must go RED. "
-            "Checks out a commit in a throwaway worktree, runs your guard command "
-            "(it must be green), reverts ONLY the production-code half of the "
-            "commit, and runs it again. Verdicts: VERIFIED (the guard went red "
-            "without the fix - it is real), DECORATION (it passed without the fix "
-            "- it proves nothing), INCONCLUSIVE (premise broken, timeout, merge "
-            "commit, bad usage - never reported as a pass). Call this before "
-            "claiming a fix is guarded. SLOW: it builds a git worktree and runs "
-            "your test command twice, so budget seconds to minutes, and do not "
-            "call it in a loop."
+            "WARNING: RUNS your command on this machine as the current user. A "
+            "test runner, not a linter: do not allowlist it. Not a shell - one "
+            "program with arguments, optionally prefixed `cd <dir> &&`; a pipe, "
+            "`;`, `>`, a backtick or `$` is REFUSED as INCONCLUSIVE. "
+            "Doctrine 2.2: checks the commit out in a worktree, runs your guard "
+            "(must be green), reverts only the production half, runs it again. "
+            "VERIFIED = red without the fix. DECORATION = still green, proves "
+            "nothing. INCONCLUSIVE = could not tell, never a pass. SLOW."
         ),
         "argv": _argv_verify_guard,
         "result_codes": {0: "VERIFIED", 1: "DECORATION", 2: "INCONCLUSIVE"},
@@ -389,23 +423,15 @@ TOOLS: tuple[dict, ...] = (
             "type": "object",
             "properties": {
                 "guard_cmd": {"type": "string", "description":
-                              "The command that runs the guard, e.g. "
-                              "'python -m pytest tests/test_tenant.py::test_x'. "
-                              "Stack-agnostic: go test, npx cypress run, anything."},
-                "commit": {"type": "string", "description":
-                           "Commit holding the fix AND its guard. Default HEAD."},
+                              "One program and its arguments, e.g. "
+                              "'python -m pytest tests/test_x.py::test_y'."},
+                "commit": {"type": "string", "description": "Default HEAD."},
                 "repo": _REPO,
-                "code_paths": {"type": "array", "items": {"type": "string"},
-                               "description": "Globs naming the production half "
-                                              "to revert, if the default split is wrong."},
-                "guard_paths": {"type": "array", "items": {"type": "string"},
-                                "description": "Globs naming the test half to KEEP."},
-                "setup_cmd": {"type": "string", "description":
-                              "Command run in the worktree before the guard "
-                              "(install, build)."},
-                "link": {"type": "array", "items": {"type": "string"},
-                         "description": "Directories to symlink into the "
-                                        "worktree, e.g. node_modules."},
+                "code_paths": dict(_PATHS, description="Globs: revert these."),
+                "guard_paths": _PATHS,
+                "setup_cmd": {"type": "string",
+                              "description": "Same rules as guard_cmd."},
+                "link": _PATHS,
                 "timeout_s": _TIMEOUT,
             },
             "required": ["guard_cmd"],
@@ -414,15 +440,13 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "budget_check",
-        "title": "Declared budgets must be enforced",
+        "title": "Budgets are enforced",
         "module": "budget",
         "description": (
-            "Mechanise doctrine 1.1. Reads `sutradhar_budget` frontmatter from "
-            "design notes and fails when a declared number (n, rps, p95_ms, "
-            "memory_mb) is not enforced by any test. A budget written down and "
-            "never enforced reads as a commitment and behaves like a wish. "
-            "Verdicts: OK, or FINDINGS listing each unenforced budget and where "
-            "it was declared. Call after adding or editing a design note."
+            "Doctrine 1.1: fails when a number declared in a design note's "
+            "`sutradhar_budget` frontmatter (n, rps, p95_ms, memory_mb) is "
+            "enforced by no test. OK, or FINDINGS naming each and where it was "
+            "declared."
         ),
         "argv": _argv_budget,
         "result_codes": {0: "OK", 1: "FINDINGS"},
@@ -430,10 +454,8 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "design_dir": {"type": "string", "description":
-                               "Directory of design notes, e.g. docs/design/."},
-                "tests_dir": {"type": "string", "description":
-                              "Directory of tests that must enforce them."},
+                "design_dir": {"type": "string", "description": "e.g. docs/design/."},
+                "tests_dir": {"type": "string"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -443,18 +465,14 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "obsgate_check",
-        "title": "Does the observability floor exist",
+        "title": "Observability floor",
         "module": "obsgate",
         "description": (
-            "Doctrine 6.6: a claim about a running system is worth what the "
-            "surface that witnessed it is worth. Given a Prometheus-format "
-            "metrics payload (file or URL) and a declared floor manifest, checks "
-            "that every surface a claim will lean on has live series behind it, "
-            "with label-cardinality caps. Pass `samples` (>1) to also detect a "
-            "FROZEN exporter - byte-identical scrapes on a surface whose counters "
-            "must move. Verdicts: OK, UNWITNESSED (floor unmet), INCONCLUSIVE "
-            "(endpoint unreachable or timed out - never a pass), FROZEN. Call "
-            "before trusting any number read off a dashboard."
+            "Doctrine 6.6: given a Prometheus-format payload and a floor "
+            "manifest, checks that every surface a claim leans on has live "
+            "series, with label-cardinality caps. `samples` > 1 also detects a "
+            "FROZEN exporter. OK / UNWITNESSED / INCONCLUSIVE (unreachable - "
+            "never a pass) / FROZEN."
         ),
         "argv": _argv_obsgate_check,
         "result_codes": {0: "OK", 1: "UNWITNESSED", 3: "INCONCLUSIVE", 4: "FROZEN"},
@@ -462,14 +480,12 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "metrics": {"type": "string", "description":
-                            "Path to a metrics file, or an http(s) URL."},
-                "floor": {"type": "string", "description":
-                          "Path to the JSON floor manifest."},
-                "samples": {"type": "integer", "description":
-                            "Scrape this many times to detect a frozen exporter."},
-                "interval_ms": {"type": "integer", "description":
-                                "Delay between samples."},
+                "metrics": {"type": "string",
+                            "description": "A file path or an http(s) URL."},
+                "floor": {"type": "string"},
+                "samples": {"type": "integer",
+                            "description": ">1 finds a frozen exporter."},
+                "interval_ms": {"type": "integer"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -479,16 +495,13 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "obsgate_snapshot",
-        "title": "Digest a metrics surface now",
+        "title": "Metrics snapshot",
         "module": "obsgate",
         "description": (
-            "Write a deterministic digest of a metrics surface at this moment: "
-            "per family its TYPE, series count, sorted label keys, "
-            "order-independent value sum and a sha256. Take one BEFORE your "
-            "change and one AFTER, then call obsgate_effects to find out whether "
-            "the change was actually witnessed. Without a before, 'witnessed' "
-            "cannot be computed, only asserted. Verdict: OK, or INCONCLUSIVE if "
-            "the surface could not be read."
+            "Deterministic digest of a metrics surface now: per family, TYPE, "
+            "series count, sorted label keys, order-independent value sum, "
+            "sha256. Take one before a change and one after, then call "
+            "obsgate_effects. OK, or INCONCLUSIVE if it could not be read."
         ),
         "argv": _argv_obsgate_snapshot,
         "result_codes": {0: "OK", 1: "UNWITNESSED", 3: "INCONCLUSIVE", 4: "FROZEN"},
@@ -496,10 +509,9 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "metrics": {"type": "string", "description":
-                            "Path to a metrics file, or an http(s) URL."},
-                "out": {"type": "string", "description":
-                        "Path to write the snapshot JSON to."},
+                "metrics": {"type": "string",
+                            "description": "A file path or an http(s) URL."},
+                "out": {"type": "string"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -512,15 +524,12 @@ TOOLS: tuple[dict, ...] = (
         "title": "Was the change witnessed",
         "module": "obsgate",
         "description": (
-            "Doctrine 6.6 as an exit code. Given two snapshots and a floor "
-            "manifest declaring what a change must be SEEN to do (increased, "
-            "appeared, no_vanished_series, stable_labels), answers whether each "
-            "declared effect actually happened at the runtime surface. Names the "
-            "DIRECTION of every miss, distinguishes a counter RESET from a "
-            "decline, and answers UNANSWERABLE rather than passing when the "
-            "snapshot cannot know. A manifest with no effects section refuses "
-            "rather than returning a vacuous pass. Verdicts: OK, UNWITNESSED, "
-            "INCONCLUSIVE. Call this to decide whether a change is DONE."
+            "Doctrine 6.6 as an exit code: given two snapshots and a floor "
+            "manifest's `effects` section (increased, appeared, "
+            "no_vanished_series, stable_labels), says whether each happened at "
+            "the runtime surface. Names the DIRECTION of a miss, tells a "
+            "counter reset from a decline, and refuses a manifest with no "
+            "effects rather than passing vacuously."
         ),
         "argv": _argv_obsgate_effects,
         "result_codes": {0: "OK", 1: "UNWITNESSED", 3: "INCONCLUSIVE", 4: "FROZEN"},
@@ -528,12 +537,9 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "before": {"type": "string", "description":
-                           "Snapshot taken before the change."},
-                "after": {"type": "string", "description":
-                          "Snapshot taken after the change."},
-                "floor": {"type": "string", "description":
-                          "Floor manifest carrying the `effects` section."},
+                "before": {"type": "string"},
+                "after": {"type": "string"},
+                "floor": {"type": "string"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -546,13 +552,10 @@ TOOLS: tuple[dict, ...] = (
         "title": "Validate the round records",
         "module": "rounds",
         "description": (
-            "Validate robustness-round records: the findings table parses, "
-            "severities and statuses are legal (fixed/deferred/closed/retracted), "
-            "and every cited doctrine rule id actually exists in DOCTRINE.md. A "
-            "mistyped rule id silently loses the attribution doctrine 8.1 depends "
-            "on, so this catches it the day it is written. Verdicts: OK, or "
-            "FINDINGS naming the invalid records. Call after writing a round "
-            "record, before committing it."
+            "Validates round records: the findings table parses, severities "
+            "and statuses are legal (fixed/deferred/closed/retracted), and "
+            "every cited rule id exists in DOCTRINE.md. OK, or FINDINGS naming "
+            "the invalid records."
         ),
         "argv": _argv_rounds,
         "result_codes": {0: "OK", 1: "FINDINGS"},
@@ -560,10 +563,8 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "rounds_dir": {"type": "string", "description":
-                               "Directory of round records, e.g. docs/rounds/."},
-                "doctrine": {"type": "string", "description":
-                             "Path to DOCTRINE.md. Default DOCTRINE.md."},
+                "rounds_dir": {"type": "string"},
+                "doctrine": {"type": "string",},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -573,19 +574,14 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "swallow_lint",
-        "title": "New silent exception swallows",
+        "title": "New silent swallows",
         "module": "swallow_lint",
         "description": (
-            "Flag exception handlers that catch broadly and neither log, re-raise "
-            "nor degrade explicitly - they return an empty value instead. A "
-            "swallowed exception converts an outage into a lie: a failed datastore "
-            "read swallowed into {} reads downstream as 'no data', flipping "
-            "verdicts under a green status. This is a RATCHET against a per-file "
-            "baseline, so it fails only on a NEW swallow. Verdicts: OK, or "
-            "FINDINGS with file:line for each regression. Call after writing "
-            "error handling. (Writing the baseline is deliberately not exposed "
-            "here - raising your own floor mid-task would make any finding "
-            "disappear. Run the CLI for that.)"
+            "Doctrine 2.7: flags handlers that catch broadly and neither log, "
+            "re-raise nor degrade - a failed read swallowed into {} reads "
+            "downstream as 'no data'. A ratchet against a per-file baseline: "
+            "only a NEW swallow fails. OK, or FINDINGS with file:line. Writing "
+            "the baseline is deliberately not exposed here."
         ),
         "argv": _argv_swallow,
         "result_codes": {0: "OK", 1: "FINDINGS"},
@@ -593,13 +589,10 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "paths": {"type": "array", "items": {"type": "string"},
-                          "description": "Files or directories to scan."},
-                "baseline": {"type": "string", "description":
-                             "Baseline JSON path. Default swallow_baseline.json."},
-                "allow_call": {"type": "array", "items": {"type": "string"},
-                               "description": "Project-specific degrade helpers "
-                                              "that make a swallow explicit."},
+                "paths": _PATHS,
+                "baseline": {"type": "string",
+                             "description": "Default swallow_baseline.json."},
+                "allow_call": _PATHS,
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -609,17 +602,13 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "interpolation_lint",
-        "title": "Query-language interpolation risks",
+        "title": "Query interpolation",
         "module": "interpolation_lint",
         "description": (
-            "Flag f-strings that interpolate a value into a query language (SQL, "
-            "SPARQL, Cypher). The pattern is a hole even when today's value is a "
-            "constant: it becomes the vulnerability the moment someone "
-            "parameterises it, so the fix is applied while the value is still "
-            "safe. Interpolations wrapped in an escaping call, or in int()/ "
-            "float()/len(), are safe. Verdicts: OK, or FINDINGS with file:line "
-            "and the offending expression. Call after writing any query-building "
-            "code."
+            "Doctrine 2.8: flags f-strings interpolating a value into a query "
+            "language (SQL, SPARQL, Cypher) - a hole even when today's value "
+            "is a constant. Interpolations inside an escaping call, or "
+            "int()/float()/len(), are safe. OK, or FINDINGS with file:line."
         ),
         "argv": _argv_interpolation,
         "result_codes": {0: "OK", 1: "FINDINGS"},
@@ -627,18 +616,14 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "paths": {"type": "array", "items": {"type": "string"},
-                          "description": "Files or directories to scan."},
+                "paths": _PATHS,
                 "keywords": {"type": "string", "description":
-                             "Comma-separated presets or literal keywords: "
                              "sql, sparql, cypher. Default sql+sparql."},
-                "safe_call": {"type": "array", "items": {"type": "string"},
-                              "description": "Your project's escaping helpers."},
-                "allowlist": {"type": "string", "description":
-                              "Path to a JSON array of reviewed names."},
-                "strict": {"type": "boolean", "description":
-                           "Also flag bare interpolations such as LIMIT {n}, "
-                           "not just quoted literal positions."},
+                "safe_call": _PATHS,
+                "allowlist": {"type": "string",
+                              "description": "JSON of reviewed names."},
+                "strict": {"type": "boolean",
+                           "description": "Also flag bare holes: LIMIT {n}."},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,
             },
@@ -648,15 +633,13 @@ TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "framework_only",
-        "title": "Still copy-in, still zero-dependency",
+        "title": "Still zero-dependency",
         "module": "framework_only",
         "description": (
-            "Check that the guard surface imports the standard library only and "
-            "that no packaging or dependency manifest exists outside examples/. "
-            "The first third-party import is the moment a copy-in toolkit becomes "
-            "a pip-install product; this makes that a conscious diff rather than "
-            "a quiet drift. Verdicts: OK, or FINDINGS naming each breach. Call "
-            "after adding an import or a config file to a copy-in toolkit."
+            "Checks that the guard surface imports the standard library only "
+            "and that no dependency manifest exists outside examples/, so a "
+            "copy-in toolkit becoming a pip-install product is a conscious "
+            "diff. OK, or FINDINGS naming each breach."
         ),
         "argv": _argv_framework_only,
         "result_codes": {0: "OK", 1: "FINDINGS"},
@@ -664,17 +647,15 @@ TOOLS: tuple[dict, ...] = (
         "inputSchema": {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description":
-                         "Repository root to scan. Default '.'."},
-                "guards": {"type": "string", "description":
-                           "Path to the stdlib-only guard directory. Default "
-                           "python/sutradhar_guards."},
+                "repo": {"type": "string", "description": "Root to scan. Default '.'."},
+                "guards": {"type": "string"},
                 "timeout_s": _TIMEOUT,
             },
             "additionalProperties": False,
         },
     },
 )
+
 
 BY_NAME = {tool["name"]: tool for tool in TOOLS}
 
@@ -838,6 +819,13 @@ def run_tool(name: str, arguments: dict) -> dict:
             command=" ".join(shlex.quote(a) for a in argv),
         )
 
+    # The cut is stated AND the whole thing is kept. A partial finding list
+    # read as a complete one is worse than no list, and "re-run it yourself"
+    # is an instruction the caller may not be able to follow - the guard ran
+    # here, in this cwd, with this timeout.
+    spilled = spill(name, (proc.stdout or "") + (proc.stderr or "")) \
+        if (out_cut or err_cut) else ""
+
     structured = {
         "tool": name,
         "verdict": verdict,
@@ -853,6 +841,7 @@ def run_tool(name: str, arguments: dict) -> dict:
         "stderr_truncated": err_cut,
         "stderr_total_bytes": err_total,
         "output_cap_bytes": MAX_OUTPUT_BYTES,
+        "output_spill_path": spilled or None,
     }
 
     headline = (
@@ -860,8 +849,8 @@ def run_tool(name: str, arguments: dict) -> dict:
         f"$ {structured['command']}"
     )
     blocks = [headline]
-    for rendered in (_render_stream("stdout", out, out_cut, out_total),
-                     _render_stream("stderr", err, err_cut, err_total)):
+    for rendered in (_render_stream("stdout", out, out_cut, out_total, spilled),
+                     _render_stream("stderr", err, err_cut, err_total, spilled)):
         if rendered:
             blocks.append(rendered)
 
@@ -918,24 +907,14 @@ def dispatch(method: str, params: dict) -> dict:
             "protocolVersion": agreed,
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-            "instructions": (
-                "Sutradhar's guards, callable mid-task. A RED verdict is a "
-                "normal result, not an error: read `structuredContent.verdict`. "
-                "A JSON-RPC error from this server means the guard could not be "
-                "run at all, so nothing was measured."
-            ),
+            "instructions": INSTRUCTIONS,
         })
 
     if method == "server/discover":
         return _result({
             "supportedVersions": list(SUPPORTED_VERSIONS),
             "capabilities": {"tools": {"listChanged": False}},
-            "instructions": (
-                "Sutradhar's guards, callable mid-task. A RED verdict is a "
-                "normal result, not an error: read `structuredContent.verdict`. "
-                "A JSON-RPC error from this server means the guard could not be "
-                "run at all, so nothing was measured."
-            ),
+            "instructions": INSTRUCTIONS,
         })
 
     if method == "ping":
@@ -1111,6 +1090,15 @@ def _selfcheck_body() -> bool:
     text, cut, total = cap_output("short", limit=10)
     if cut or text != "short":
         ok = _fail("cap_output truncated a stream that fits")
+
+    # 1b. The `tools/list` payload is spent from the caller's context every
+    #     session, called or not. A schema budget nobody measures is the
+    #     doctrine 1.1 failure applied to tokens.
+    listed_bytes = len(json.dumps(public_tools()))
+    if listed_bytes > TOOLS_LIST_MAX_BYTES:
+        ok = _fail(f"tools/list serialises to {listed_bytes:,} bytes, over the "
+                   f"declared ceiling of {TOOLS_LIST_MAX_BYTES:,}. Every "
+                   f"session pays this whether a tool is called or not.")
 
     # 2. Every tool must carry a schema AND an exit-code partition.
     for tool in TOOLS:
