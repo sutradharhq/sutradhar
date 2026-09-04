@@ -10,6 +10,12 @@ upgrade by diffing against the tag they took.
 **Two doors closed, and a plugin that survives being installed** (round 16;
 record: [docs/rounds/round-016.md](docs/rounds/round-016.md)).
 
+- **The pre-commit gate's fast path no longer imports `pathlib`, `subprocess`
+  or `re` before it knows the command is a commit.** CI on Linux measured it
+  at 3.2x a bare interpreter start against the declared 3.0x; it is 1.47x now
+  on the machine that measured 1.88x before. The ratio test takes the
+  minimum over its rounds rather than the mean, and a deterministic test
+  fails if any of the three modules is loaded on a non-commit command (R16-8).
 - **BREAKING: a `--guard-cmd` is no longer a shell command.** `verify_guard`
   spawns it as one program with arguments - optionally prefixed by
   `cd <dir> &&`, whose directory must resolve inside the worktree - and
