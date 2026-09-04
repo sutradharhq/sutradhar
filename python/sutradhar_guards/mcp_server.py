@@ -362,6 +362,15 @@ TOOLS: tuple[dict, ...] = (
         "title": "Prove a guard can fail",
         "module": "verify_guard",
         "description": (
+            "WARNING: this tool RUNS the command you give it, on this machine, "
+            "as the user running this server, with their environment and network "
+            "access. It is a test runner, not a linter. Do not put it on an "
+            "allowlist, and do not call it with a command you would not type "
+            "into that user's shell yourself. The command is spawned as one "
+            "program with arguments (optionally prefixed by `cd <dir> &&`), "
+            "never through a shell: pipes, redirection, `;`, backticks and "
+            "$(...) are REFUSED as INCONCLUSIVE, so put anything more complex "
+            "in a script and name the script.\n"
             "Mechanise doctrine 2.2: revert the fix, and the guard must go RED. "
             "Checks out a commit in a throwaway worktree, runs your guard command "
             "(it must be green), reverts ONLY the production-code half of the "
@@ -683,6 +692,62 @@ def guard_dir() -> Path:
     return Path(override) if override else Path(__file__).resolve().parent
 
 
+#: Set to "1" to let `repo` name any directory on this machine. The default
+#: is the repository the server was started in, because a tool argument is
+#: written by a model and `verify_guard` runs a command inside whatever
+#: `repo` names, as the user running the server (R16-3).
+ANY_REPO_ENV = "SUTRADHAR_MCP_ANY_REPO"
+
+
+def confinement_root() -> Path:
+    """The one directory tree `repo` may name.
+
+    The git toplevel of the server's own cwd; the cwd itself when that is not
+    a repository. Not a guess about intent - a boundary, so that "which repo
+    is this server for" has one answer instead of being re-decided per call.
+    """
+    cwd = Path(os.getcwd()).resolve()
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=str(cwd),
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return cwd
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return cwd
+    return Path(proc.stdout.strip()).resolve()
+
+
+def confined_cwd(requested: str | None) -> str:
+    """Resolve `repo` and refuse anything outside `confinement_root()`.
+
+    A refusal here is a CALLER error (-32602), not an instrument failure:
+    nothing broke, the argument is out of bounds. Reporting it as an
+    instrument failure would say "the tool is broken" about a tool that is
+    working exactly as designed.
+    """
+    if requested is None:
+        return os.getcwd()
+    target = Path(requested).expanduser()
+    if not target.is_dir():
+        raise _bad_args(f"`repo` is not a directory: {requested}")
+    if os.environ.get(ANY_REPO_ENV) == "1":
+        return str(target)
+    root = confinement_root()
+    resolved = target.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise _bad_args(
+            f"`repo` {requested} resolves to {resolved}, which is outside "
+            f"{root} - the repository this server was started in. These tools "
+            f"run guard CLIs there, and `verify_guard` runs the command you "
+            f"give it, so the server does not follow a path out of its own "
+            f"tree. Start a server in that repository, or set "
+            f"{ANY_REPO_ENV}=1 if pointing this one anywhere is what you want."
+        )
+    return str(target)
+
+
 def public_tools() -> list[dict]:
     """The `tools/list` view: no internals, deterministic order."""
     return [
@@ -730,9 +795,7 @@ def run_tool(name: str, arguments: dict) -> dict:
             tool=name, expected_path=str(script),
         )
 
-    cwd = arguments.get("repo") or os.getcwd()
-    if not Path(cwd).is_dir():
-        raise _bad_args(f"`repo` is not a directory: {cwd}")
+    cwd = confined_cwd(arguments.get("repo"))
 
     argv = [sys.executable, str(script), *tail]
     timeout = _int(arguments, "timeout_s", default=spec["default_timeout"])
@@ -1125,6 +1188,18 @@ def _selfcheck_body() -> bool:
                 ok = _fail("a red guard set isError, which means 'retry with "
                            "adjusted parameters' - it is not a call the agent "
                            "should retry")
+
+            # 6b. `repo` outside this server's own tree is a CALLER error.
+            #     These tools run guard CLIs in whatever `repo` names, and
+            #     `verify_guard` runs the caller's command there (R16-3).
+            outside = client.call("tools/call", {
+                "name": "interpolation_lint",
+                "arguments": {"paths": [str(tmp / "clean")],
+                              "repo": str(Path(tmp_s).parent.resolve())},
+            })
+            if outside.get("error", {}).get("code") != INVALID_PARAMS:
+                ok = _fail(f"a `repo` outside this server's tree was accepted; "
+                           f"the confinement is decoration: {outside}")
 
             # 7. An unknown tool is an ERROR, not a verdict.
             unknown = client.call("tools/call", {"name": "no_such_tool"})

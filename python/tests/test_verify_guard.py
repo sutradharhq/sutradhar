@@ -120,14 +120,145 @@ def test_missing_guard_cmd_is_inconclusive(tmp_path):
     assert res.verdict == vg.INCONCLUSIVE and res.exit_code == 2
 
 
-def test_piped_guard_cmd_is_warned_about():
-    """Doctrine 6.3: `pytest ... | tee log` reports tee's exit code, so the
-    guard is green while pytest is red. The tool must say so."""
+# ── what a guard command is allowed to be (R16-3) ───────────────────────────
+#
+# This tool runs the command it is handed, as the user running it, and the
+# string does not have to come from a person typing: it can be an MCP tool
+# argument written by a model, or a `Guard-cmd:` trailer on a commit
+# somebody else authored. Through a shell, "the guard command" and "an
+# arbitrary shell" were the same surface. These pin the smaller surface.
+
+@pytest.mark.parametrize("cmd,argv,subdir", [
+    ("pytest -q tests/x.py", ["pytest", "-q", "tests/x.py"], None),
+    # The shape every `Guard-cmd:` trailer in this repository's history uses.
+    # The day this stops parsing, the per-commit check goes quietly
+    # INCONCLUSIVE forever (R15-6 is what that failure looks like).
+    ("cd python && python -m pytest tests/x.py -q",
+     ["python", "-m", "pytest", "tests/x.py", "-q"], "python"),
+    # Without a shell a quoted operator is just an argument.
+    ('pytest -k "a|b"', ["pytest", "-k", "a|b"], None),
+])
+def test_a_guard_command_is_a_program_and_its_arguments(cmd, argv, subdir):
+    assert vg.parse_guard_cmd(cmd) == (argv, subdir)
+
+
+@pytest.mark.parametrize("cmd", [
+    "pytest | cat",
+    "pytest; rm -rf /",
+    "echo $(id)",
+    "`id`",
+    "cd .. && pytest",
+    "pytest && cd x",
+    "",
+    "   ",
+    "pytest > log",
+    "cd python",
+    "pytest 'unclosed",
+])
+def test_a_command_only_a_shell_could_read_is_refused(cmd):
+    with pytest.raises(vg.GuardCommandRefused):
+        vg.parse_guard_cmd(cmd)
+
+
+def test_a_cd_that_leaves_the_worktree_is_refused_at_resolution_too(tmp_path):
+    """Belt and braces: the lexical `..` check is not the only thing standing
+    between a guard command and somebody else's directory."""
+    (tmp_path / "inside").mkdir()
+    assert vg.resolve_guard_cwd(tmp_path, "inside") == (tmp_path / "inside").resolve()
+    assert vg.resolve_guard_cwd(tmp_path, None) == tmp_path.resolve()
+    with pytest.raises(vg.GuardCommandRefused):
+        vg.resolve_guard_cwd(tmp_path / "inside", "../..")
+    with pytest.raises(vg.GuardCommandRefused):
+        vg.resolve_guard_cwd(tmp_path, "not-a-directory")
+
+
+def test_the_cli_refuses_a_shell_command_as_inconclusive(tmp_path):
+    """The exit code and the words, at the CLI seam.
+
+    2 is INCONCLUSIVE - "no guard ran, so nothing was measured" (2.9). It is
+    the one non-verdict code this tool has, and it must never be 0: a refusal
+    reported as VERIFIED would be this tool claiming a check it declined to
+    perform.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-m", "sutradhar_guards.verify_guard",
+         "--guard-cmd", "pytest | cat"],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
+    said = proc.stdout + proc.stderr
+    assert "not run through a shell" in said, said
+    assert "INCONCLUSIVE" in said, said
+    assert "VERIFIED" not in said and "DECORATION" not in said, said
+
+
+def test_the_cli_refuses_a_shell_setup_cmd_too():
+    """`--setup-cmd` is the same door with a different sign on it."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "sutradhar_guards.verify_guard",
+         "--guard-cmd", "true", "--setup-cmd", "pip install x && curl evil"],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
+    assert "not run through a shell" in proc.stdout + proc.stderr
+
+
+def test_a_refused_command_is_inconclusive_and_never_a_verdict():
     root = vg._fixture_repo()
     try:
         res = vg.verify(root, commit="HEAD~1",
                         guard_cmd=f"{sys.executable} tests/check_real.py | cat")
-        assert any("pipe" in w for w in res.warnings)
+        assert res.verdict == vg.INCONCLUSIVE and res.exit_code == 2
+        assert "not run through a shell" in res.reason
+    finally:
+        __import__("shutil").rmtree(root, ignore_errors=True)
+
+
+def test_the_cd_prefix_still_runs_the_guard():
+    """The one convenience that survived, exercised end to end rather than
+    at the parser: `cd tests && <python> check_real_here.py` must still
+    reach VERIFIED."""
+    root = vg._fixture_repo()
+    try:
+        res = vg.verify(
+            root, commit="HEAD~1",
+            guard_cmd=f"cd tests && {sys.executable} check_real_here.py")
+        assert res.verdict == vg.VERIFIED, res.reason
+    finally:
+        __import__("shutil").rmtree(root, ignore_errors=True)
+
+
+def test_no_shell_true_survives_anywhere_in_the_verifier():
+    """A class ratchet over the AST, not a memory of this change.
+
+    Over the AST rather than the text, so the sentence in the module
+    docstring that promises no shell does not read as a violation of itself
+    - a guard that goes red at the documentation of its own rule teaches
+    everyone to delete it.
+    """
+    import ast
+    source = Path(vg.__file__).read_text(encoding="utf-8")
+    for node in ast.walk(ast.parse(source, filename=vg.__file__)):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            assert not (kw.arg == "shell"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value), f"verify_guard.py:{node.lineno} shell=True"
+
+
+def test_a_program_that_cannot_be_started_is_not_a_red():
+    """A shell answered "no such program" with exit 127, which this tool
+    would have read as a guard going red - a verdict about a process that
+    never started."""
+    root = vg._fixture_repo()
+    try:
+        res = vg.verify(root, commit="HEAD~1",
+                        guard_cmd="sutradhar-no-such-program-anywhere --now")
+        assert res.verdict == vg.INCONCLUSIVE, res.reason
+        assert "could not be started" in res.reason
     finally:
         __import__("shutil").rmtree(root, ignore_errors=True)
 

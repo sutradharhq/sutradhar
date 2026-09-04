@@ -12,11 +12,20 @@ the commit, which is the last moment it is cheap to fix.
 
     Guard-cmd: python -m pytest tests/test_billing.py -q
 
+**A trailer is a command, and it runs on this machine.** HEAD is not
+necessarily a commit the person at this keyboard wrote: checking out a pull
+request, pulling upstream, or merging a contributor all make somebody else's
+commit message the input to this hook. So the trailer is run only when
+HEAD's author email matches `git config user.email` in that repository, and
+otherwise the hook says whose commit it is and prints the command to run by
+hand (R16-2). An unset `user.email` is treated as "not mine".
+
 | HEAD                              | verdict      | what happens                  |
 |-----------------------------------|--------------|-------------------------------|
 | trailer, guard goes red on revert | VERIFIED     | silence                       |
 | trailer, guard stays green        | DECORATION   | `decision: "block"` + reason  |
 | trailer, verifier could not tell  | INCONCLUSIVE | said by name, stop proceeds   |
+| trailer, authored by someone else | not run      | who wrote it + the command    |
 | no trailer, prod + test both moved| -            | a reminder, never a block     |
 | anything else                     | -            | silence                       |
 
@@ -43,6 +52,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -144,6 +154,45 @@ def record(mark: Path | None) -> None:
                          f"{type(exc).__name__}: {exc}\n")
 
 
+def current_user_email(cwd: str | Path) -> str:
+    """`git config user.email`, or "" when it is unset.
+
+    Unset is not an error here and not a match either: a repository with no
+    identity configured cannot say that HEAD is yours, so it is treated as
+    somebody else's and said out loud.
+    """
+    try:
+        return H.git(cwd, "config", "user.email").strip()
+    except H.InstrumentFailure:
+        return ""
+
+
+def by_hand(root: Path, guard_cmd: str) -> str:
+    """The exact one-line command that runs this trailer deliberately."""
+    try:
+        tool = str(H.guard_dir() / "verify_guard.py")
+    except H.InstrumentFailure:
+        tool = "verify_guard.py"
+    return (f"python3 {shlex.quote(tool)} --repo {shlex.quote(str(root))} "
+            f"--commit HEAD --guard-cmd {shlex.quote(guard_cmd)}")
+
+
+def not_my_commit(author: str, user: str, sha: str, root: Path,
+                  guard_cmd: str) -> str:
+    """What the hook says instead of running somebody else's command."""
+    whose = (f"HEAD ({sha[:8]}) was authored by {author}, and this repository "
+             f"has no `user.email` set, so nothing here can say the commit is "
+             f"yours" if not user else
+             f"HEAD ({sha[:8]}) was authored by {author}, and you are {user}")
+    return (
+        f"{H.MARKER} {whose}. A `Guard-cmd:` trailer is a command, and running "
+        f"it would run it on this machine as you - so this hook only runs "
+        f"trailers written by the current git user. Nothing was run and "
+        f"nothing is claimed about that commit's guard. To check it yourself, "
+        f"read the trailer first and then run:\n  {by_hand(root, guard_cmd)}\n"
+        f"Guard-cmd: {guard_cmd}")
+
+
 def verify(root: Path, guard_cmd: str) -> tuple[str, str]:
     """(verdict, the verifier's own text). Never a verdict we invented."""
     gdir = H.guard_dir()
@@ -172,6 +221,7 @@ def check(payload: dict) -> None:
         root = Path(H.git(cwd, "rev-parse", "--show-toplevel").strip())
         sha = H.git(cwd, "rev-parse", "HEAD").strip()
         message = H.git(cwd, "log", "-1", "--format=%B")
+        author = H.git(cwd, "log", "-1", "--format=%ae").strip()
         touched = [p for p in H.git(cwd, "show", "--name-only", "--format=",
                                     "HEAD").splitlines() if p.strip()]
     except H.InstrumentFailure:
@@ -198,6 +248,15 @@ def check(payload: dict) -> None:
                 f"Production: {', '.join(prod[:5])}"
                 + (" ..." if len(prod) > 5 else ""))
         H.allow_silently()
+
+    # Whose command is this? Answered BEFORE the trailer is anywhere near a
+    # subprocess: a Stop hook fires at the end of every turn, and the HEAD it
+    # reads is whatever is checked out - a pulled branch, a contributor's PR,
+    # a merge. Running a stranger's string as the developer is not a check.
+    user = current_user_email(cwd)
+    if not user or author != user:
+        record(mark)
+        H.allow_with_message(not_my_commit(author, user, sha, root, guard_cmd))
 
     verdict, detail = verify(root, guard_cmd)
     record(mark)
@@ -278,10 +337,30 @@ def selfcheck() -> bool:
               "looking like a pass (R15-1).", file=sys.stderr)
         ok = False
 
+    # R16-2. The message the hook prints INSTEAD of running a stranger's
+    # command has to name the stranger and hand the command over, or the
+    # refusal is silent - and a silent refusal reads exactly like a pass.
+    said = not_my_commit("them@example.invalid", "me@example.invalid",
+                         "abcdef1234", Path("/tmp/x"), "pytest -q tests/x.py")
+    for needle in ("them@example.invalid", "me@example.invalid",
+                   "verify_guard.py", "--guard-cmd", "on this machine"):
+        if needle not in said:
+            print(f"[verify-before-done] SELFCHECK FAILED: the not-my-commit "
+                  f"message does not carry {needle!r}", file=sys.stderr)
+            ok = False
+    unset = not_my_commit("them@example.invalid", "", "abcdef1234",
+                          Path("/tmp/x"), "pytest -q")
+    if "no `user.email` set" not in unset:
+        print("[verify-before-done] SELFCHECK FAILED: an unset user.email is "
+              "not named as the reason, so a reader cannot tell 'somebody "
+              "else's commit' from 'this repo has no identity'.",
+              file=sys.stderr)
+        ok = False
+
     if ok:
         print("[verify-before-done] selfcheck OK: trailer reader (5 cases), "
               "production/test split (8 paths), verdict partition (4), "
-              "marker key (1).")
+              "marker key (1), not-my-commit message (6).")
     return ok
 
 
