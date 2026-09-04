@@ -7,6 +7,17 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Fifteen backflow items decided, five rules appended** (round 17; record:
+[docs/rounds/round-017.md](docs/rounds/round-017.md)).
+
+- **DOCTRINE.md gains 6.7-6.11**, carried from the maintainer's standing
+  doctrine with their scars; ids appended, none renumbered. Rules 2.3, 2.5,
+  3.6, 4.6, 5.1, 6.4, 6.6, 7.3 and 7.4 each gain a sentence from a register
+  item.
+- **The backflow gate is green again** by decision: thirteen items adopted, two
+  (B-13, B-16) decided as adopt and re-deferred to round 18 as mechanisms to
+  build. Nothing rejected.
+
 **Two doors closed, and a plugin that survives being installed** (round 16;
 record: [docs/rounds/round-016.md](docs/rounds/round-016.md)).
 

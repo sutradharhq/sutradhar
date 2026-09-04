@@ -61,7 +61,7 @@ the full operating rules are in `agent/AGENTS.md`.
 
 ## When reporting
 
-- **An exit code is evidence only in pairs.** [6.3, 6.6] It is a claim about a
+- **An exit code is evidence only in pairs.** [6.3, 6.7] It is a claim about a
   process, not about a check: a known-good input must exit 0 AND a known-bad
   input must exit non-zero before a check counts as green. `--selfcheck` on a
   tool with no argument parser exits 0 because the import succeeded, and reads

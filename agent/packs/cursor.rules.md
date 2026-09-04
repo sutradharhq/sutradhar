@@ -62,7 +62,7 @@ where the incident that paid for it is recorded.
 
 ## Reporting results
 
-- [6.3, 6.6] An exit code is a claim about a process, not about a check. It is
+- [6.3, 6.7] An exit code is a claim about a process, not about a check. It is
   evidence only in pairs: a known-good input exits 0 AND a known-bad input
   exits non-zero. `--selfcheck` on a tool with no argument parser exits 0
   because the import succeeded, and reads exactly like a pass. Never pipe a
