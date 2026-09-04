@@ -7,6 +7,49 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**The harness inside the agent's loop** (round 15; design note:
+[docs/design/agent-loop-hooks.md](docs/design/agent-loop-hooks.md)).
+
+- **`plugin/`** (new): a Claude Code plugin that makes the guards
+  non-optional for a session instead of merely available. It bundles two new
+  hooks, and **references** rather than copies the existing MCP server and
+  the two skills in `agent/skills/` - one server, one version, and a copy
+  would be a second answer that wins silently the first time the two
+  disagree. Load it with `claude --plugin-dir ./plugin` from a checkout; it
+  is per-session on purpose and writes to nobody's `settings.json`.
+- **Pre-commit gate** (`PreToolUse`): on a Bash `git commit`, runs the fast
+  guards - `interpolation_lint` over the staged Python, `swallow_lint`
+  against a baseline when one exists, `rounds --check` when `docs/rounds/`
+  exists - and denies the commit with the guard's own output when one is
+  red. A guard that is inapplicable is **named as skipped**, never folded
+  into a green verdict, and the gate **says which tree it read**: the guards
+  see the working tree, `git commit` takes the index, and the message lists
+  the staged paths where the two differ (backflow B-15).
+- **Verify-before-done** (`Stop`): if HEAD carries a `Guard-cmd:` trailer -
+  the convention `ci/guards.yml` already reads - it asks `verify_guard`
+  whether that guard is real. DECORATION blocks the turn from ending;
+  INCONCLUSIVE is reported **as inconclusive and never as a pass**; a commit
+  moving production and test files with no trailer gets a reminder, not a
+  block. Silent otherwise, and it reports a given HEAD at most once per
+  session.
+- **A hook that crashes never blocks.** Any failure of the hook itself - a
+  missing guard, a spawn error, a timeout, an exit code outside the guard's
+  documented partition, a bug in the hook - is reported as an *instrument*
+  failure naming the hook, and the action proceeds. Hook usage errors exit
+  1, not 2, because 2 is the harness's block signal and a typo in our own
+  configuration must not deny your tool call. A source ratchet over the AST
+  of every hook script refuses `SystemExit(2)` and `shell=True`.
+- **Budget** `precommit-gate` (new): 10 gated commits within 2,500 ms and
+  16 MB, enforced by
+  `test_precommit_gate_holds_its_declared_envelope`. Measured baseline
+  155-172 ms per gated commit; the fast path costs 1.93-2.09x a bare
+  interpreter start against a declared ceiling of 3.0x. R14-2 is a correct
+  guard that was switched off the same afternoon because its signal cost
+  more than it paid, and a gate on every commit has that failure with a
+  shorter fuse.
+- 35 new tests, all driving the hooks as real subprocesses over real
+  repositories (370 -> 405).
+
 **Two defects reported by the threads that use this, and the mechanism that
 should have carried them here sooner** (round 14; register:
 [docs/backflow.md](docs/backflow.md)).
