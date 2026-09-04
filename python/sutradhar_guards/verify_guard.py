@@ -29,12 +29,27 @@ stack-agnostic; it only needs Python to run, not to verify.
     python verify_guard.py --commit a1b2c3d --guard-cmd "npm test -- cart" \
         --link node_modules
 
+**A guard command is one program with arguments, and it is NOT run through
+a shell.** It is `shlex`-split into an argv list and spawned directly; the
+one prefix that survives is `cd <dir> && ...`, which sets the working
+directory and must resolve inside the worktree. A pipe, a redirection, `;`,
+`&&` past that prefix, a backtick or `$(...)` is REFUSED, and a refusal
+exits 2 (INCONCLUSIVE) because no guard ran. Put anything more complex in a
+script and name the script.
+
+That is a smaller surface on purpose. This tool runs the command it is
+handed, as the user running it, and the string can arrive from somewhere
+that is not a person typing - an MCP tool argument written by a model, a
+`Guard-cmd:` trailer on a commit somebody else authored. Through a shell,
+"the guard command" and "an arbitrary shell" were the same surface (R16-3).
+
 Exit codes are a deliberate tri-state - "I could not tell" is never
 reported as "pass":
 
     0  VERIFIED      the guard went red without the fix. It is real.
     1  DECORATION    the guard passed without the fix. It proves nothing.
-    2  INCONCLUSIVE  premise broken, timeout, merge commit, bad usage.
+    2  INCONCLUSIVE  premise broken, timeout, merge commit, bad usage, or a
+                     guard command this tool refused to run.
 
 Honest limits, stated plainly:
 
@@ -58,6 +73,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -229,6 +245,136 @@ def exists_at(repo: Path, rev: str, path: str) -> bool:
     return proc.returncode == 0
 
 
+# ── what a guard command is allowed to be ───────────────────────────────────
+#
+# This tool is handed a command by whoever is asking for a verification, and
+# it runs that command on the machine it is running on. When it ran the
+# string through a shell, "the command" and "an arbitrary shell" were the
+# same surface, and every caller that could reach a guard command - an MCP
+# tool argument written by a model, a `Guard-cmd:` trailer on a commit
+# somebody else authored - was that shell. So the string is parsed here into
+# an argv list, and what the parser cannot express cannot happen (1.2).
+#
+# Exactly one convenience survives, because every `Guard-cmd:` trailer in
+# this repository's history uses it: a leading `cd <dir> &&` sets the working
+# directory, and `<dir>` must resolve inside the worktree.
+
+_OPERATOR_CHARS = "|;&<>()"
+_SUBSTITUTION = ("`", "$")
+
+_HOW_A_GUARD_COMMAND_LOOKS = (
+    "A guard command is one program with arguments, optionally prefixed by "
+    "`cd <dir> &&`; it is not run through a shell, so pipes, redirections, "
+    "chaining, backticks, $(...) and variable expansion have no meaning here "
+    "- put anything more complex in a script and name the script."
+)
+
+
+class GuardNotRun(Exception):
+    """No guard process ran, for any reason. Never a verdict.
+
+    Every subclass reaches the CLI as INCONCLUSIVE (exit 2), because nothing
+    was measured (2.9). It is never VERIFIED, never DECORATION, and never
+    exit 0.
+    """
+
+
+class GuardCommandRefused(GuardNotRun, ValueError):
+    """The command is not one program with arguments, so it was not run."""
+
+
+class GuardSpawnFailed(GuardNotRun):
+    """The program named could not be started."""
+
+
+def _refuse(cmd: str, why: str) -> GuardCommandRefused:
+    return GuardCommandRefused(
+        f"refusing to run {cmd!r}: {why}. {_HOW_A_GUARD_COMMAND_LOOKS}")
+
+
+def _operators_in(cmd: str) -> list[str]:
+    """Shell operators appearing OUTSIDE quotes, in order.
+
+    `shlex.split` alone is not enough: it splits on whitespace, so
+    `pytest; rm -rf /` comes back as the single token `pytest;` and an
+    exact-token comparison misses the `;` entirely. `punctuation_chars`
+    makes the lexer separate `| ; & < > ( )` the way a shell would, which
+    is what lets a quoted `-k "a|b"` stay an argument while a bare `|` is
+    seen for what it is.
+    """
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    return [t for t in lex if t and all(ch in _OPERATOR_CHARS for ch in t)]
+
+
+def parse_guard_cmd(cmd: str) -> tuple[list[str], str | None]:
+    """(argv, working directory relative to the worktree or None).
+
+    Refuses anything that only a shell could interpret. The refusal is the
+    product here: this function's job is not to be permissive, it is to make
+    "the guard command" a strictly smaller thing than "a command line".
+    """
+    for mark in _SUBSTITUTION:
+        if mark in cmd:
+            raise _refuse(cmd, f"it contains {mark!r}: command substitution and "
+                               f"variable expansion need a shell, and passing "
+                               f"the text through literally instead would run a "
+                               f"different check than the one written")
+    try:
+        tokens = shlex.split(cmd)
+        operators = _operators_in(cmd)
+    except ValueError as exc:
+        raise _refuse(cmd, f"it does not tokenise ({type(exc).__name__}: {exc})")
+    if not tokens:
+        raise _refuse(cmd, "it is empty, so there is no program to run")
+
+    subdir: str | None = None
+    allowed: list[str] = []
+    if tokens[0] == "cd":
+        if len(tokens) < 4 or tokens[2] != "&&":
+            raise _refuse(cmd, "a leading `cd` is only allowed as the exact "
+                               "prefix `cd <dir> && <program> [args]`")
+        subdir = tokens[1]
+        if Path(subdir).is_absolute() or ".." in Path(subdir).parts:
+            raise _refuse(cmd, f"the `cd` target {subdir!r} is absolute or "
+                               f"climbs out of the worktree; it must name a "
+                               f"directory inside the commit under test")
+        tokens = tokens[3:]
+        allowed = ["&&"]
+
+    if operators != allowed:
+        stray = next((op for op in operators if op not in allowed), operators[0])
+        raise _refuse(cmd, f"{stray!r} is a shell operator and there is no shell")
+    if "cd" in tokens:
+        raise _refuse(cmd, "`cd` appears somewhere other than as the single "
+                           "permitted `cd <dir> &&` prefix")
+    if not tokens:
+        raise _refuse(cmd, "the `cd <dir> &&` prefix is followed by no program")
+    return tokens, subdir
+
+
+def resolve_guard_cwd(root: Path, subdir: str | None) -> Path:
+    """Where the guard runs. `subdir` must land inside `root`.
+
+    `..` and absolute paths are refused rather than clamped: a guard run
+    outside the worktree is not measuring the commit under test, and a
+    silently corrected path would report a verdict about the wrong tree.
+    """
+    base = Path(root).resolve()
+    if subdir is None:
+        return base
+    target = (base / subdir).resolve()
+    if target != base and base not in target.parents:
+        raise GuardCommandRefused(
+            f"refusing to run in {subdir!r}: it resolves to {target}, which is "
+            f"outside the worktree at {base}. {_HOW_A_GUARD_COMMAND_LOOKS}")
+    if not target.is_dir():
+        raise GuardCommandRefused(
+            f"refusing to run in {subdir!r}: {target} is not a directory in "
+            f"this worktree. {_HOW_A_GUARD_COMMAND_LOOKS}")
+    return target
+
+
 # ── running the guard ───────────────────────────────────────────────────────
 
 @dataclass
@@ -240,14 +386,19 @@ class Run:
 def run_guard(cwd: Path, cmd: str, timeout: int, env_extra: dict | None = None) -> Run:
     """Run the guard command and capture its exit code EXPLICITLY.
 
+    Spawned as an argv list with no shell (see `parse_guard_cmd`), so the
+    command is a program and its arguments and nothing else.
+
     Doctrine 6.3: the exit code is the verdict. We never inspect output to
     decide pass/fail, and we never let a wrapper swallow `$?`."""
+    argv, subdir = parse_guard_cmd(cmd)
+    workdir = resolve_guard_cwd(cwd, subdir)
     env = dict(os.environ)
     env.update(env_extra or {})
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     try:
         proc = subprocess.run(
-            cmd, shell=True, cwd=str(cwd), capture_output=True, text=True,
+            argv, cwd=str(workdir), capture_output=True, text=True,
             timeout=timeout, env=env,
         )
     except subprocess.TimeoutExpired as exc:
@@ -255,6 +406,14 @@ def run_guard(cwd: Path, cmd: str, timeout: int, env_extra: dict | None = None) 
         if isinstance(partial, bytes):
             partial = partial.decode("utf-8", "replace")
         return Run(None, partial)
+    except OSError as exc:
+        # A shell turned "no such program" into exit 127, which this tool
+        # would have read as a RED guard - a verdict about a process that
+        # never started. Without a shell it is an OSError, and it says so.
+        raise GuardSpawnFailed(
+            f"{argv[0]!r} could not be started in {workdir}: "
+            f"{type(exc).__name__}: {exc}. No guard ran, so nothing is claimed "
+            f"about the code under test.")
     return Run(proc.returncode, proc.stdout + proc.stderr)
 
 
@@ -305,12 +464,14 @@ def verify(
     if not guard_cmd.strip():
         return Result(INCONCLUSIVE, "no --guard-cmd given: there is nothing to verify.")
 
-    if re.search(r"(?<!\|)\|(?!\|)", guard_cmd):
-        warnings.append(
-            "guard-cmd contains a pipe. A shell pipeline reports the LAST "
-            "command's exit code, so `pytest ... | tee log` is green when "
-            "pytest is red (doctrine 6.3). Use `set -o pipefail;` or drop the pipe."
-        )
+    # Parsed BEFORE any git work: a command that will never be run should not
+    # cost a worktree, and a refusal is cheaper to read on its own.
+    try:
+        parse_guard_cmd(guard_cmd)
+        if setup_cmd:
+            parse_guard_cmd(setup_cmd)
+    except GuardCommandRefused as exc:
+        return Result(INCONCLUSIVE, str(exc))
 
     try:
         sha = _git(repo, "rev-parse", "--verify", f"{commit}^{{commit}}").strip()
@@ -469,6 +630,11 @@ def verify(
     except GitError as exc:
         return Result(INCONCLUSIVE, f"git operation failed: {exc}", commit=sha,
                       code_files=code, guard_files=guard, inert_files=inert, warnings=warnings)
+    except GuardNotRun as exc:
+        # A refused command or a program that would not start. No guard ran,
+        # so this is INCONCLUSIVE - never a DECORATION and never a pass.
+        return Result(INCONCLUSIVE, str(exc), commit=sha, code_files=code,
+                      guard_files=guard, inert_files=inert, warnings=warnings)
     finally:
         if keep_worktree:
             print(f"[verify-guard] worktree kept at {worktree}", file=sys.stderr)
@@ -527,6 +693,17 @@ import sys
 sys.exit(1)              # red no matter what: the premise is broken
 '''
 
+# The same real guard, written to be run from INSIDE tests/ - so the
+# `cd <dir> && <program>` form has something to prove. Every `Guard-cmd:`
+# trailer in this repository's history is of that shape, so the day it stops
+# working is the day the per-commit check goes quietly INCONCLUSIVE.
+FIXTURE_GUARD_REAL_IN_SUBDIR = '''\
+import os, sys
+sys.path.insert(0, os.path.dirname(os.getcwd()))
+import calc
+sys.exit(0 if abs(calc.total(100, 10) - 900.0) < 1e-9 else 1)
+'''
+
 
 def _fixture_repo() -> Path:
     """Build a throwaway repo: a buggy parent, then a fix commit carrying
@@ -554,6 +731,7 @@ def _fixture_repo() -> Path:
     (root / "tests" / "check_real.py").write_text(FIXTURE_GUARD_REAL)
     (root / "tests" / "check_decorative.py").write_text(FIXTURE_GUARD_DECORATIVE)
     (root / "tests" / "check_broken.py").write_text(FIXTURE_GUARD_BROKEN)
+    (root / "tests" / "check_real_here.py").write_text(FIXTURE_GUARD_REAL_IN_SUBDIR)
     git("add", "calc.py", "tests")
     git("commit", "-q", "-m", "fix: apply the bulk discount")
 
@@ -571,7 +749,7 @@ def selfcheck_end_to_end(verbose: bool = False) -> bool:
     would pass every CI run while proving nothing, so the decorative case is
     the load-bearing half of this check."""
     root = _fixture_repo()
-    py = sys.executable
+    py = shlex.quote(sys.executable)
     cases = [
         ("real guard on the fix commit", "HEAD~1",
          f"{py} tests/check_real.py", VERIFIED),
@@ -581,6 +759,20 @@ def selfcheck_end_to_end(verbose: bool = False) -> bool:
          f"{py} tests/check_broken.py", INCONCLUSIVE),
         ("docs-only commit has no fix to revert", "HEAD",
          f"{py} tests/check_real.py", INCONCLUSIVE),
+        # The one prefix that survived the shell's removal. This is the form
+        # every `Guard-cmd:` trailer in this repository uses, so it is run
+        # end to end rather than asserted at the parser.
+        ("`cd <dir> && cmd` still runs the guard", "HEAD~1",
+         f"cd tests && {py} check_real_here.py", VERIFIED),
+        # ...and the refusal, which is the half that makes the zero above
+        # mean something (6.7, evidence in pairs). A pipe is not a guard
+        # command, and refusing it is INCONCLUSIVE - never a pass.
+        ("a piped guard command is REFUSED, not run", "HEAD~1",
+         f"{py} tests/check_real.py | cat", INCONCLUSIVE),
+        ("a chained guard command is REFUSED", "HEAD~1",
+         f"{py} tests/check_real.py; id", INCONCLUSIVE),
+        ("a `cd` out of the worktree is REFUSED", "HEAD~1",
+         f"cd .. && {py} check_real.py", INCONCLUSIVE),
     ]
     ok = True
     try:
@@ -609,6 +801,51 @@ def selfcheck_end_to_end(verbose: bool = False) -> bool:
             ok = False
     finally:
         shutil.rmtree(root, ignore_errors=True)
+    return ok
+
+
+def selfcheck_command_parsing() -> bool:
+    """Cheap, pure, runs on every invocation: the accept list and the refuse
+    list, because a parser that accepted everything would be exactly the
+    shell this replaced, and one that refused everything would make the tool
+    unusable while looking safe."""
+    accept = [
+        ("pytest -q tests/x.py", ["pytest", "-q", "tests/x.py"], None),
+        # The shape every `Guard-cmd:` trailer in this repo uses.
+        ("cd python && python -m pytest tests/x.py -q",
+         ["python", "-m", "pytest", "tests/x.py", "-q"], "python"),
+        # A quoted operator is an ARGUMENT, not an operator: without a shell
+        # there is nothing to interpret it.
+        ('pytest -k "a|b"', ["pytest", "-k", "a|b"], None),
+    ]
+    refuse = [
+        "pytest | cat", "pytest; rm -rf /", "echo $(id)", "`id`",
+        "cd .. && pytest", "pytest && cd x", "", "   ",
+        "pytest > log", "pytest && pytest", "cd python", "cd python && ",
+        "pytest 'unclosed",
+    ]
+    ok = True
+    for cmd, want_argv, want_dir in accept:
+        try:
+            argv, subdir = parse_guard_cmd(cmd)
+        except GuardCommandRefused as exc:
+            print(f"[verify-guard] SELFCHECK FAILED: {cmd!r} was refused, and "
+                  f"it is a legal guard command: {exc}", file=sys.stderr)
+            ok = False
+            continue
+        if (argv, subdir) != (want_argv, want_dir):
+            print(f"[verify-guard] SELFCHECK FAILED: {cmd!r} parsed as "
+                  f"{(argv, subdir)}, want {(want_argv, want_dir)}", file=sys.stderr)
+            ok = False
+    for cmd in refuse:
+        try:
+            parse_guard_cmd(cmd)
+        except GuardCommandRefused:
+            continue
+        print(f"[verify-guard] SELFCHECK FAILED: {cmd!r} was ACCEPTED. A guard "
+              f"command that only a shell could interpret must be refused - "
+              f"this tool runs it as the current user.", file=sys.stderr)
+        ok = False
     return ok
 
 
@@ -685,7 +922,7 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0
 
-    if not selfcheck_classification():
+    if not selfcheck_classification() or not selfcheck_command_parsing():
         return 2
 
     if "--selfcheck" in argv:

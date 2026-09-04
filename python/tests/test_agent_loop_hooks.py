@@ -31,6 +31,7 @@ import ast
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -142,6 +143,12 @@ def repo(tmp_path: Path) -> Path:
     r = tmp_path / "repo"
     r.mkdir()
     git(r, "init", "-q", "-b", "main")
+    # A LOCAL identity, matching the one every commit here is authored with.
+    # The Stop hook only runs a `Guard-cmd:` trailer written by the current
+    # git user (R16-2), so a fixture whose repo has no `user.email` would
+    # exercise the not-my-commit branch on every test in this file.
+    git(r, "config", "user.name", "Test")
+    git(r, "config", "user.email", "t@example.com")
     (r / "README.md").write_text("fixture\n")
     git(r, "add", "README.md")
     git(r, "commit", "-q", "-m", "initial")
@@ -444,6 +451,74 @@ def test_stop_hook_reminds_when_prod_and_test_move_without_a_trailer(
     assert "decision" not in body, body
     assert "Guard-cmd:" in body["systemMessage"]
     assert "app/billing.py" in body["systemMessage"]
+
+
+def test_stop_hook_will_not_run_someone_elses_trailer(repo: Path, tmp_path: Path):
+    """R16-2. A `Guard-cmd:` trailer is a command that runs on this machine.
+
+    HEAD is whatever is checked out - a pulled branch, a contributor's PR, a
+    merge - so "the commit at HEAD" and "a commit this developer wrote" are
+    different things, and the hook may only act on the second. The planted
+    trailer writes a sentinel file: if the hook spawned `verify_guard`, the
+    file exists, and no assertion about the message would have noticed.
+    """
+    sentinel = tmp_path / "the-trailer-ran"
+    script = tmp_path / "trailer.py"
+    script.write_text(f"open({str(sentinel)!r}, 'w').close()\n")
+    trailer = f"{shlex.quote(sys.executable)} {shlex.quote(str(script))}"
+
+    stage(repo, "app/query.py", CLEAN_SOURCE)
+    subprocess.run(
+        ["git", "-c", "user.name=Someone Else",
+         "-c", "user.email=someone-else@example.com",
+         "commit", "-q", "-m", f"their fix\n\nGuard-cmd: {trailer}"],
+        cwd=str(repo), capture_output=True, text=True, timeout=60, check=True,
+    )
+
+    proc = run_hook(DONE, stop(repo), marks(tmp_path))
+    body = out(proc)
+    assert "decision" not in body, body
+    assert "someone-else@example.com" in body["systemMessage"], body
+    assert "t@example.com" in body["systemMessage"], body
+    assert "verify_guard.py" in body["systemMessage"], body
+    assert not sentinel.exists(), (
+        "the hook RAN a command chosen by whoever authored HEAD. Checking out "
+        "a pull request is enough to reach this path.")
+
+
+def test_stop_hook_will_not_run_a_trailer_when_the_repo_has_no_identity(
+        repo: Path, tmp_path: Path):
+    """Unset `user.email` is not a match. It cannot be: nothing in the
+    repository can then say the commit is yours, and defaulting to "run it"
+    would make the check disappear on exactly the machines least configured
+    to have one."""
+    commit_with_trailer(repo)
+    subprocess.run(["git", "config", "--unset", "user.email"], cwd=str(repo),
+                   capture_output=True, text=True, timeout=60)
+    stubs = stub_guards(tmp_path, verify_guard=1)
+    proc = run_hook(DONE, stop(repo), {
+        "SUTRADHAR_GUARD_DIR": str(stubs),
+        # Unsetting the LOCAL identity is not enough: git falls back to the
+        # global file, which on a developer's machine is set. The hook must
+        # be tested against a repository that genuinely has no identity.
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull,
+        **marks(tmp_path)})
+    body = out(proc)
+    assert "decision" not in body, body
+    assert "no `user.email` set" in body["systemMessage"], body
+
+
+def test_stop_hook_runs_the_trailer_when_the_commit_is_yours(
+        repo: Path, tmp_path: Path):
+    """The other half of the pair. An author check that refused everything
+    would pass the test above while switching the whole hook off."""
+    commit_with_trailer(repo)
+    stubs = stub_guards(tmp_path, verify_guard=1)
+    proc = run_hook(DONE, stop(repo),
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
+    body = out(proc)
+    assert body.get("decision") == "block", body
+    assert "DECORATION" in body["reason"]
 
 
 def test_stop_hook_is_silent_on_a_docs_only_commit(repo: Path, tmp_path: Path):

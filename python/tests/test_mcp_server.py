@@ -226,8 +226,14 @@ def test_verify_guards_exit_2_arrives_as_a_verdict(server, tmp_path):
     """
     outside = tmp_path / "not-a-repo"
     outside.mkdir()
-    res = server.call_tool("verify_guard",
-                           {"guard_cmd": "true", "repo": str(outside)})
+    # `repo` outside this server's own tree is refused by default (R16-3), so
+    # the server that answers this one is told, explicitly, to go anywhere.
+    s = Server(env_extra={"SUTRADHAR_MCP_ANY_REPO": "1"})
+    try:
+        res = s.call_tool("verify_guard",
+                          {"guard_cmd": "true", "repo": str(outside)})
+    finally:
+        s.close()
     assert "error" not in res, (
         f"verify_guard's INCONCLUSIVE was reported as an instrument failure. "
         f"'I could not tell' is an answer, not a crash: {res.get('error')}")
@@ -415,6 +421,73 @@ def test_unknown_tool_is_an_error(server):
     res = server.call_tool("no_such_tool")
     assert res["error"]["code"] == INVALID_PARAMS
     assert "Unknown tool" in res["error"]["message"]
+
+
+# ── `repo` confinement (R16-3) ──────────────────────────────────────────────
+#
+# These tools run guard CLIs in whatever `repo` names, and `verify_guard`
+# runs the caller's own command there, as the user running the server. The
+# arguments are written by a model. So `repo` is a boundary, not a hint.
+
+def test_a_repo_outside_this_servers_tree_is_a_caller_error(server, tmp_path):
+    elsewhere = tmp_path / "somebody-elses-checkout"
+    elsewhere.mkdir()
+    res = server.call_tool("interpolation_lint",
+                           {"paths": [str(elsewhere)], "repo": str(elsewhere)})
+    assert "result" not in res, (
+        "a `repo` outside the server's own repository was accepted; these "
+        "tools run commands there")
+    assert res["error"]["code"] == INVALID_PARAMS, res["error"]
+    assert res["error"]["data"]["party"] == "caller", (
+        "an out-of-bounds argument is the caller's, not a broken instrument")
+    assert str(elsewhere) in res["error"]["message"]
+
+
+def test_a_repo_inside_this_servers_tree_is_fine(server, clean_tree):
+    """The half that makes the refusal above mean something: a confinement
+    that refused everything would pass that test and switch the tool off."""
+    inside = REPO_ROOT / "python"
+    res = server.call_tool("interpolation_lint",
+                           {"paths": [str(clean_tree)], "repo": str(inside)})
+    assert "error" not in res, res.get("error")
+    assert res["result"]["structuredContent"]["cwd"] == str(inside)
+
+
+def test_the_confinement_can_be_lifted_deliberately(tmp_path):
+    """An override that has to be typed. The default is the boundary; the
+    escape hatch exists and is named in the refusal message, so nobody has
+    to guess at it."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "ok.py").write_text("x = 1\n")
+    s = Server(env_extra={"SUTRADHAR_MCP_ANY_REPO": "1"})
+    try:
+        res = s.call_tool("interpolation_lint",
+                          {"paths": [str(elsewhere)], "repo": str(elsewhere)})
+    finally:
+        s.close()
+    assert "error" not in res, res.get("error")
+    assert res["result"]["structuredContent"]["verdict"] == "OK"
+
+
+def test_a_server_outside_a_git_repo_is_confined_to_its_own_cwd(tmp_path):
+    """No git toplevel, no repository to confine to - so the cwd is the
+    boundary. The failure to avoid is falling back to "anywhere"."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "ok.py").write_text("x = 1\n")
+    away = tmp_path / "away"
+    away.mkdir()
+    s = Server(cwd=home)
+    try:
+        inside = s.call_tool("interpolation_lint",
+                             {"paths": [str(home)], "repo": str(home)})
+        outside = s.call_tool("interpolation_lint",
+                              {"paths": [str(away)], "repo": str(away)})
+    finally:
+        s.close()
+    assert "error" not in inside, inside.get("error")
+    assert outside["error"]["code"] == INVALID_PARAMS, outside
 
 
 # ── the session survives bad input ──────────────────────────────────────────
