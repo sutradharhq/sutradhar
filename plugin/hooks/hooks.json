@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/precommit_gate.py"],
+            "timeout": 120,
+            "statusMessage": "sutradhar: gating the commit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/verify_before_done.py"],
+            "timeout": 300,
+            "statusMessage": "sutradhar: is the guard on HEAD real?"
+          }
+        ]
+      }
+    ]
+  }
+}

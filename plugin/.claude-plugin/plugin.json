@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "sutradhar",
+  "displayName": "Sutradhar guards",
+  "version": "0.3.0",
+  "description": "Makes the robustness harness non-optional inside a session: the guards gate git commit, and a decorative guard on HEAD is caught before the turn ends.",
+  "author": {
+    "name": "Varun Mundra",
+    "url": "https://github.com/sutradharhq/sutradhar"
+  },
+  "homepage": "https://github.com/sutradharhq/sutradhar",
+  "repository": "https://github.com/sutradharhq/sutradhar",
+  "license": "Apache-2.0",
+  "keywords": ["guards", "robustness", "testing", "doctrine", "hooks"]
+}

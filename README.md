@@ -164,6 +164,10 @@ sutradhar/
 │   └── skills/
 │       ├── robustness-loop.md     A repeatable adversarial depth sweep
 │       └── ops-drill.md           Operate the system, don't read it
+├── plugin/                  Claude Code plugin: the guards as session hooks, not as advice
+│   ├── hooks/hooks.json           PreToolUse gates `git commit`; Stop checks the guard on HEAD
+│   ├── scripts/                   The two hooks, stdlib only - and they never block when THEY fail
+│   └── skills/                    Wrappers pointing at the canonical skills above
 └── bootstrap.sh             Copies the pieces into your repo
 ```
 
@@ -209,6 +213,18 @@ Then:
    optional MCP server - `claude mcp add sutradhar -- python3
    python/sutradhar_guards/mcp_server.py` - which exposes nine guards as
    tools ([docs/design/mcp-server.md](docs/design/mcp-server.md)).
+
+   To go further and make them **non-optional inside the session** - the
+   guards gate `git commit`, and a decorative guard on HEAD is caught before
+   the turn ends - load the Claude Code plugin from a checkout:
+
+   ```bash
+   claude --plugin-dir ./plugin
+   ```
+
+   It is per-session on purpose, and it never blocks when the hook itself
+   fails ([plugin/README.md](plugin/README.md),
+   [docs/design/agent-loop-hooks.md](docs/design/agent-loop-hooks.md)).
 2. **Turn on the Python guards** (any Python backend):
    ```bash
    python scripts/swallow_lint.py src/ --update-baseline   # record today's floor

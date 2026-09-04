@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sutradhar-guards": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards/mcp_server.py"]
+    }
+  }
+}
