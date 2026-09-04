@@ -34,6 +34,7 @@ jobs:
         run: |
           python python/sutradhar_guards/swallow_lint.py --selfcheck
           python python/sutradhar_guards/interpolation_lint.py --selfcheck
+          python python/sutradhar_guards/dead_route_lint.py --selfcheck
           python python/sutradhar_guards/obsgate.py --selfcheck
           python python/sutradhar_guards/framework_only.py --selfcheck
       - name: This repo is still a framework, not a product
@@ -74,6 +75,7 @@ jobs:
           python3.9 -m compileall -q python/sutradhar_guards
           python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
           python3.9 python/sutradhar_guards/interpolation_lint.py --selfcheck
+          python3.9 python/sutradhar_guards/dead_route_lint.py --selfcheck
           python3.9 python/sutradhar_guards/verify_guard.py --selfcheck
           python3.9 python/sutradhar_guards/budget.py --selfcheck
           python3.9 python/sutradhar_guards/rounds.py --selfcheck

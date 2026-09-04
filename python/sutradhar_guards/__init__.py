@@ -14,6 +14,7 @@ earned it and the usage pattern.
   golden               golden-dataset gate with declared tolerance + reasoned re-baseline
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
   obsgate              observability floor as a provenance gate (doctrine 6.6)
+  dead_route_lint      tests that cannot fail: weak assertions + dead routes
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
@@ -64,6 +65,8 @@ _EXPORTS = {
     "GoldenGate": "golden",
     "find_order_by_without_limit": "detectors",
     "find_unresolved_relative_imports": "detectors",
+    "find_dead_routes": "dead_route_lint",
+    "find_unfailable_assertions": "dead_route_lint",
     # obsgate's verdict constants are NOT exported: verify_guard already
     # owns the package-level INCONCLUSIVE, and two constants with one name
     # and different owners is the shadowing class again. Import verdicts
