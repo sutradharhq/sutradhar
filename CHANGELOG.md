@@ -14,6 +14,10 @@ upgrade by diffing against the tag they took.
   doctrine with their scars; ids appended, none renumbered. Rules 2.3, 2.5,
   3.6, 4.6, 5.1, 6.4, 6.6, 7.3 and 7.4 each gain a sentence from a register
   item.
+- **Four sentences carried in from the maintainer's standing doctrine** so the
+  two files are the same text: the witness cross-reference in 5.1, the
+  incident-pays-its-way-in line in 6.6, dead-code-with-an-alibi in 8.2, and
+  per-tenant caps in 4.4. The standing file is now generated from this one.
 - **The backflow gate is green again** by decision: thirteen items adopted, two
   (B-13, B-16) decided as adopt and re-deferred to round 18 as mechanisms to
   build. Nothing rejected.
