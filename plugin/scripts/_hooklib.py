@@ -147,15 +147,27 @@ def guard_dir() -> Path:
     """Where the guard CLIs live.
 
     `SUTRADHAR_GUARD_DIR` first, for adopters who copied the guards to
-    `scripts/`; otherwise the checkout this plugin is a view onto. Absent or
-    incomplete is an instrument failure, never a verdict.
+    `scripts/`; then the guards bundled inside this plugin. Absent is an
+    instrument failure naming both paths tried, never a verdict.
+
+    The `../python/sutradhar_guards` this used to fall back to is gone.
+    Claude Code copies an installed plugin into `~/.claude/plugins/cache`
+    and does NOT copy files outside the plugin directory, so that path
+    existed only in the layout this was built in - a checkout - and the
+    plugin would have failed the first time anyone installed it from a
+    marketplace (R16-1). `plugin/guards/` is pinned byte-for-byte to
+    `python/sutradhar_guards/` by `test_plugin_bundle.py`.
     """
     env = os.environ.get("SUTRADHAR_GUARD_DIR")
-    root = Path(env) if env else Path(__file__).resolve().parents[2] / "python" / "sutradhar_guards"
+    bundled = Path(__file__).resolve().parents[1] / "guards"
+    root = Path(env) if env else bundled
     if not root.is_dir():
+        tried = f"SUTRADHAR_GUARD_DIR={env}" if env else f"the plugin's own {bundled}"
         raise InstrumentFailure(
-            f"no guard directory at {root} (set SUTRADHAR_GUARD_DIR to point at "
-            f"the copied guards)"
+            f"no guard directory at {root} (tried {tried}; the fallback is "
+            f"{bundled}). Set SUTRADHAR_GUARD_DIR to point at the guards, or "
+            f"reinstall the plugin - nothing was measured and nothing is "
+            f"claimed about your code."
         )
     return root
 

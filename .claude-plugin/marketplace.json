@@ -1,0 +1,13 @@
+{
+  "name": "sutradhar",
+  "owner": {
+    "name": "Varun Mundra"
+  },
+  "plugins": [
+    {
+      "name": "sutradhar",
+      "source": "./plugin",
+      "description": "Runs the robustness guards inside the session: they gate git commit, and a decorative guard on HEAD is caught before the turn ends."
+    }
+  ]
+}
