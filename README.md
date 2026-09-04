@@ -167,6 +167,7 @@ sutradhar/
 ├── plugin/                  Claude Code plugin: the guards as session hooks, not as advice
 │   ├── hooks/hooks.json           PreToolUse gates `git commit`; Stop checks the guard on HEAD
 │   ├── scripts/                   The two hooks, stdlib only - and they never block when THEY fail
+│   ├── guards/                    The guard programs it runs, pinned byte-for-byte to python/ by a test
 │   └── skills/                    Wrappers pointing at the canonical skills above
 └── bootstrap.sh             Copies the pieces into your repo
 ```
@@ -216,14 +217,17 @@ Then:
 
    To go further and make them **non-optional inside the session** - the
    guards gate `git commit`, and a decorative guard on HEAD is caught before
-   the turn ends - load the Claude Code plugin from a checkout:
+   the turn ends - install the Claude Code plugin, in two commands and no
+   settings file:
 
-   ```bash
-   claude --plugin-dir ./plugin
+   ```
+   /plugin marketplace add sutradharhq/sutradhar
+   /plugin install sutradhar@sutradhar
    ```
 
-   It is per-session on purpose, and it never blocks when the hook itself
-   fails ([plugin/README.md](plugin/README.md),
+   Or `claude --plugin-dir ./plugin` from a checkout, for one session. It
+   never blocks when the hook itself fails, and it will not run a
+   `Guard-cmd:` trailer written by anyone but you ([plugin/README.md](plugin/README.md),
    [docs/design/agent-loop-hooks.md](docs/design/agent-loop-hooks.md)).
 2. **Turn on the Python guards** (any Python backend):
    ```bash

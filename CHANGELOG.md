@@ -7,6 +7,63 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Two doors closed, and a plugin that survives being installed** (round 16;
+record: [docs/rounds/round-016.md](docs/rounds/round-016.md)).
+
+- **BREAKING: a `--guard-cmd` is no longer a shell command.** `verify_guard`
+  spawns it as one program with arguments - optionally prefixed by
+  `cd <dir> &&`, whose directory must resolve inside the worktree - and
+  refuses a pipe, a redirection, `;`, a stray `&&`, a backtick, `$(` or a
+  bare `$`. A refusal exits **2 (INCONCLUSIVE)**, never 0, because no guard
+  ran. `--setup-cmd` follows the same rule. The `cd python && python -m
+  pytest tests/x.py -q` form every `Guard-cmd:` trailer uses still works;
+  anything more complex belongs in a script you name. A program that cannot
+  be started is now INCONCLUSIVE rather than the shell's exit 127 read as a
+  guard going red.
+- **The `Stop` hook will not run a `Guard-cmd:` trailer somebody else
+  wrote.** It compares HEAD's author email with `git config user.email` and,
+  when they differ or the repository has no identity, names the author, says
+  why it did not run the trailer, and prints the command to run by hand.
+  Checking out a pull request used to be enough to let its author choose a
+  command that ran on your machine when your turn ended.
+- **The MCP `verify_guard` tool's description opens with the warning** that
+  it runs your command as the current user, that it is a test runner and not
+  a linter, and that it should not be allowlisted. Every tool's `repo`
+  argument is now confined to the git toplevel of the server's own working
+  directory (the directory itself when that is not a repository); out of
+  bounds is a caller error, and `SUTRADHAR_MCP_ANY_REPO=1` lifts it.
+- **The plugin is self-contained, and installs in two commands.**
+  `/plugin marketplace add sutradharhq/sutradhar` then
+  `/plugin install sutradhar@sutradhar`. It ships the eight guard programs
+  it runs under `plugin/guards/`, because an installed plugin is copied
+  without the files around it - the old
+  `${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards` worked only from a
+  checkout. The copies are pinned byte-for-byte to `python/sutradhar_guards/`
+  by a test, and `python3 plugin/sync_guards.py` refreshes them.
+  `claude --plugin-dir ./plugin` still works from a checkout.
+- **`SUTRADHAR_GUARD_DIR` -> `<plugin root>/guards` -> instrument failure**
+  is the hooks' guard-directory order, and the failure names both paths.
+- **MCP output cap 65,536 -> 8,192 bytes per stream**, and truncation stops
+  being a dead end: the full output of a truncated call is written to
+  `<tempdir>/sutradhar-mcp/<tool>-<timestamp>.txt`, the notice names it, and
+  `structuredContent.output_spill_path` carries it.
+- **The `tools/list` payload is 20,718 -> 7,270 bytes** (~5,200 tokens saved
+  per session, spent whether or not a tool is called), under a declared
+  ceiling of 8,192 enforced over the real transport. The cut is repetition:
+  the shared `repo`/`timeout_s` argument descriptions and the result-object
+  field list now appear once in the server's `instructions` instead of nine
+  times. `structuredContent` is unchanged apart from the new
+  `output_spill_path`; its declared `outputSchema` now names only the three
+  fields that are always present.
+- **The plugin is exercised in an installed layout**, not only in a
+  checkout: `plugin/` is copied somewhere with nothing around it and the
+  pre-commit gate is driven there, asserting the deny. That is the layout
+  the R16-1 bug lived in, and the one nothing had ever tested.
+- **Known red:** `rounds.py docs/rounds/ --backflow docs/backflow.md` exits
+  1. Thirteen register items came due at round 16 and round 16 decided none
+  of them; the gate says so rather than being quieted. See
+  [docs/backflow.md](docs/backflow.md).
+
 **The harness inside the agent's loop** (round 15; design note:
 [docs/design/agent-loop-hooks.md](docs/design/agent-loop-hooks.md)).
 

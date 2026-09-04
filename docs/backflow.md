@@ -47,6 +47,15 @@ not present in that record's table.
 the two adopter-reported defects and the rule four threads had each invented
 separately. The rest carry round 15 or 16, and the gate will refuse them then.
 
+**Round 16 did not answer it.** Thirteen items came due at round 16 - B-5,
+B-7, B-8, B-9, B-10, B-11, B-12, B-13, B-14, B-16, B-17, B-18 and B-19 - and
+round 16 was a security round that decided none of them. The gate is
+therefore RED, deliberately, and the round record says so out loud rather
+than moving thirteen deadlines to make it green. Moving them is exactly the
+behaviour R15-4 was filed to stop, and a register that clears itself by
+re-deferring is the mechanism failing while reporting success. Deciding the
+thirteen is round 17's first job.
+
 **Round 15 is the first round the gate actually refused.** Ten items came
 due; one was adopted (B-15, by the pre-commit hook naming the tree it
 measured) and nine were re-deferred with reasons. That ratio is recorded as
@@ -82,3 +91,5 @@ which is the difference this file is meant to make.
 | B-17 | Thread-B | presence-based coverage is not coverage — an i18n check counted keys present, not keys reachable | scar | 3.6 | owed | 16 | 3.6 already says selector counting measures nothing; this is the same defect in a second surface, which is evidence the rule needs a mechanism and not just a sentence |
 | B-18 | Thread-H | coverage is part of the number: a metric that omits part of the delivered surface reports a real fix as a no-op | scar | 5.1 | deferred | 16 | re-deferred to 16 in the section-5 batch with B-7 and B-10; the maintainer's standing doctrine already carries this as a scar, so B-19's reconciliation is its natural carrier |
 | B-19 | — | this repo's public `DOCTRINE.md` lags the maintainer's standing doctrine, and the two have diverged in section 2 as well. Two independent agents cited a section 6 rule that does not exist here | scar | 8.1 | deferred | 16 | re-deferred to 16. The blocker is not effort but the numbering hazard: 89 findings resolve against these ids, so reconciliation must ADD ids and never renumber. Round 16 owes the append-only plan, not the merge |
+| B-20 | — | `interpolation_lint` sees f-string interpolation into a query-language string and not `%`-format: `"SELECT ... = '%s'" % name` is the same hole in an older spelling and passes clean | practice | 2.8 | owed | 18 | R16-5, and `practice` because nothing has been paid for it yet - it is a detector gap found by review, not an incident. 2.8 already carries its own justification, so this may only strengthen the mechanism. Round 18 rather than 17 because round 17 already owes the thirteen items that came due at 16, and a deadline nobody can meet is not a deadline |
+| B-21 | — | mutate what RUNS, not what you can see: a mutation applied to a declaration, a constant or a non-executing string reports "no change", which reads as "the guard is decoration" and means "the mutation never ran" | practice | 2.2 | owed | 18 | R16-6, third occurrence across rounds 13-15. `practice`: the cost is wasted review time and one nearly-wrong verdict, not a recorded incident, so it cannot found a rule - 2.2 already says revert the fix and watch it go red. What it can strengthen is the mechanism: the mutation step in `agent/skills/robustness-loop.md` should require naming the line that executes before editing it, and the round record should carry the command that showed the mutant red |

@@ -1,6 +1,6 @@
 ---
-sutradhar_scar: distribution
-sutradhar_scar_argument: No finding says a missing session hook lost anything. The guards exist, run in CI, and are callable as MCP tools; what this note argues is placement - the same guards, fired by the agent's own loop instead of waited for. Two findings shaped its constraints without founding it, and are cited in the text rather than here - R14-2 (a guard whose signal cost more than it paid was switched off that afternoon) is why this note carries a latency budget at all, and R3-1 (an instrument that could not tell its own failure from its subject's) is why a broken hook allows.
+sutradhar_scar: R16-1, R16-2, R16-3
+sutradhar_scar_argument: This note entered on `distribution` in round 15 - no finding said a missing session hook had lost anything, and what it argued was placement rather than a new guard. Round 16 paid for it. R16-1 (the plugin referenced `${CLAUDE_PLUGIN_ROOT}/../python`, so it worked only from a checkout and would have failed after a marketplace install), R16-2 (the Stop hook ran a `Guard-cmd:` trailer written by whoever authored HEAD, on the developer's machine) and R16-3 (`verify_guard` ran its command through a shell, reachable from an MCP tool argument written by a model) are all defects in the mechanism this note designs. Two older findings still shape its constraints without founding it and are cited in the text: R14-2 is why it carries a latency budget at all, and R3-1 is why a broken hook allows.
 sutradhar_budget: precommit-gate
 n: 10
 n_unit: gated commits
@@ -128,11 +128,41 @@ convention `ci/guards.yml` already reads — and:
 
 | HEAD | Verdict | What the hook returns |
 |---|---|---|
+| `Guard-cmd:` present, author is not you | **not run** | exit 0 with `systemMessage` naming the author and the command to run by hand |
 | `Guard-cmd:` present, `verify_guard` says VERIFIED | pass | exit 0, silent |
 | `Guard-cmd:` present, DECORATION | block | `decision: "block"` + `reason` carrying the verifier's own text |
 | `Guard-cmd:` present, INCONCLUSIVE | **inconclusive** | exit 0 with `systemMessage` naming it INCONCLUSIVE and what would resolve it |
 | no trailer, commit touches production **and** test files | reminder | exit 0 with `systemMessage` |
 | no trailer, anything else | pass | exit 0, silent |
+
+**Whose command is it** (R16-2). The author row comes first because it is
+checked first, before the trailer is anywhere near a subprocess. A
+`Guard-cmd:` trailer is a command, and HEAD is whatever is checked out:
+checking out a pull request, pulling upstream, or merging a contributor all
+make somebody else's commit message the input to this hook, and the command
+then runs on this machine, as this user, when the turn ends. The throwaway
+worktree `verify_guard` builds is not a sandbox — same uid, same `$HOME`,
+same environment, same network.
+
+So the hook compares HEAD's author email (`git log -1 --format=%ae`) with
+`git config user.email` in that repository and runs the trailer only when
+they match. An unset `user.email` is treated as *not* a match and said so by
+name: a repository with no identity cannot assert that the commit is yours,
+and defaulting to "run it" would switch the check off on exactly the
+machines least configured to have one. The message names the author, says
+the hook only runs trailers written by the current git user, and prints the
+exact one-line `verify_guard` invocation — because a silent refusal reads
+exactly like a pass (2.9).
+
+**And what the command may be** (R16-3). `verify_guard` no longer runs its
+`--guard-cmd` or `--setup-cmd` through a shell. The string is `shlex`-split
+into an argv list and spawned directly; the only prefix that survives is
+`cd <dir> &&`, whose directory must resolve inside the worktree. Everything
+else a shell would be needed for — a pipe, a redirection, `;`, a stray
+`&&`, a backtick, `$(`, a bare `$` — is refused, and a refusal exits 2
+(INCONCLUSIVE) because no guard ran. That is 1.2 rather than a filter: a
+pipeline is not something the tool declines to run, it is something the tool
+cannot express.
 
 INCONCLUSIVE is not a pass and is not a block. It is reported under its own
 name, to the user, in a message that says what the verifier could not
@@ -278,6 +308,23 @@ longer with a preview plus a file path — an uncapped denial reason would be
 silently rewritten into something the agent cannot read. The other is 2.6:
 a denial reason goes straight into the model's context.
 
+**The MCP server's two token budgets** live in
+[mcp-server.md](mcp-server.md), which is where that mechanism is designed,
+and they are named here because they are the same 2.6 argument in the same
+session: the serialised `tools/list` payload is capped at **8,192 bytes**
+(`TOOLS_LIST_MAX_BYTES`, measured at 20,718 before round 16 and 7,270
+after, enforced over the real transport by
+`test_tool_schemas_fit_a_token_budget`), and captured output is capped at
+**8,192 bytes per stream** (`MAX_OUTPUT_BYTES`, enforced by
+`test_output_cap_truncates_and_says_so`). Neither is in this note's
+`sutradhar_budget` frontmatter: that block declares exactly one budget id
+per note with the dimensions `n` / `rps` / `p95_ms` / `memory_mb`, this note
+already declares `precommit-gate`, and there is no byte dimension to declare
+a schema ceiling in. Rather than bend the frontmatter, both numbers are
+declared in mcp-server.md's cardinalities table with their enforcing test
+named, and each is pinned to its constant by a mirror test so the note and
+the code cannot drift apart.
+
 ## Failure story <!-- 1.4 -->
 
 | Dependency | Down | Slow | Partial |
@@ -325,15 +372,28 @@ code, or the copy-in contract.
 | Component | Copied or referenced | Why |
 |---|---|---|
 | the two hooks | **copied** (they are new files, and they live here) | `plugin/scripts/*.py`, stdlib only, no imports from the package — a hook that fails to import is a hook that failed, and `sys.path` inside a session is not ours to assume |
-| `mcp_server.py` | **referenced** — `plugin/.mcp.json` points `${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards/mcp_server.py` | one server, one version. A copy would be a second answer to "what does `verify_guard` do", and the first time they disagreed the copy would win silently |
+| the eight guard programs the plugin runs, `mcp_server.py` among them | **copied** — `plugin/guards/`, refreshed by `plugin/sync_guards.py` from one explicit list | R16-1. Round 15 referenced them through `${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards` to keep one server and one version, and that was a plugin which worked only in the layout it was built in: an installed plugin is copied into `~/.claude/plugins/cache` **without** the files around it. The round-15 argument is answered rather than dropped - `test_plugin_bundle.py` fails on a one-byte divergence, derives the set of scripts the plugin invokes from the hooks' AST and the MCP tool table, and refuses a file in the bundle that no list pins |
 | `agent/skills/*.md` | **referenced** — `plugin/skills/<name>/SKILL.md` carries the frontmatter Claude Code requires and a body that reads the canonical file | the canonical files have no frontmatter (they are handed to any agent, verbatim, by any harness) and adding it would be a Claude-Code-shaped change to a harness-neutral asset. A ratchet asserts one wrapper per canonical skill, so a skill added later cannot be silently un-shipped |
 | `agent/packs/*` | **neither** — documented, not installed | the packs are paste-in text for `CLAUDE.md` and a Cursor rules file. A plugin cannot append to `CLAUDE.md`, and a plugin that *silently* injected 15 KB of rules into every session would be doing the thing this note is most careful not to do |
 
-The `../` in those two paths is deliberate and is the price of not copying:
-the plugin is a view onto the checkout it lives in, and
-`claude --plugin-dir ./plugin` from the repo root resolves it. Installed
-away from a checkout, the MCP server and the skill bodies are missing —
-which the wrapper text says out loud rather than failing mysteriously.
+**No plugin config may contain `${CLAUDE_PLUGIN_ROOT}/..`**, and a ratchet
+over every JSON file under `plugin/` enforces it. That path resolves
+perfectly from a checkout and is simply absent after an install, with no
+error at install time to say so — which is why R16-1 survived a full round
+of testing. The skill wrappers still reach for `agent/skills/*.md` through
+`../`, and that is a deliberately different case: a missing skill BODY
+degrades to a wrapper that says the canonical file is not here, while a
+missing guard program is a hook that cannot measure anything.
+
+`guard_dir()` resolves in one order, and says both paths when it fails:
+
+    SUTRADHAR_GUARD_DIR  ->  <plugin root>/guards  ->  instrument failure
+
+Installed, the second one is always there. From a checkout,
+`claude --plugin-dir ./plugin` uses the same bundle, so the layout under
+test and the layout in use are the same layout — which is the actual lesson
+of R16-1, and a stronger property than any test written inside one of
+them.
 
 ## What deliberately did NOT change
 
@@ -365,11 +425,18 @@ which the wrapper text says out loud rather than failing mysteriously.
   It would make the doctrine genuinely non-optional, and it would spend
   every session's context on it without asking. If it ships it ships as an
   opt-in, with a measured token cost, in its own note.
-- **A marketplace (`.claude-plugin/marketplace.json`) for a one-command
-  persistent install.** Distribution is a separate decision with its own
-  surface (auto-update, pinning, catalogs). `--plugin-dir` is documented,
-  verified, and deliberately per-session, which is the right default for a
-  thing that can deny a commit.
+- ~~**A marketplace (`.claude-plugin/marketplace.json`) for a one-command
+  persistent install.**~~ **Reversed in round 16.** The reason given was
+  that distribution is a separate decision with its own surface, and
+  `--plugin-dir` is documented and deliberately per-session. What that
+  reasoning missed is that the two are not independent: not shipping a
+  marketplace also meant never exercising an *installed* layout, and
+  `${CLAUDE_PLUGIN_ROOT}/../python` was broken the whole time (R16-1). The
+  manifest is now at the repository root, the install is
+  `/plugin marketplace add sutradharhq/sutradhar` then
+  `/plugin install sutradhar@sutradhar`, and `--plugin-dir ./plugin` still
+  works from a checkout against the same bundle. Nothing here writes to
+  anyone's `settings.json`.
 - **Stashing or checking out the index to gate the exact committed tree.**
   Correct, and destructive in a hook that must never lose someone's work.
   The gate names the tree it read instead (B-15).
@@ -401,6 +468,10 @@ real subprocesses over real repositories (2.3), all mutation-verified in
 - [x] `test_every_canonical_skill_has_a_plugin_wrapper` (class ratchet)
 - [x] `test_hooks_json_matches_the_documented_schema` (class ratchet: every event name against the documented set)
 - [x] `test_no_hook_script_can_shell_out_or_exit_2` (class ratchet over the AST of every hook script)
+- [x] `test_stop_hook_will_not_run_someone_elses_trailer` (R16-2; the planted trailer writes a sentinel file, and the assertion is that the file does not exist)
+- [x] `test_stop_hook_will_not_run_a_trailer_when_the_repo_has_no_identity`, `test_stop_hook_runs_the_trailer_when_the_commit_is_yours` (the pair: a check that refused everything would pass the first and switch the hook off)
+- [x] `test_the_hooks_find_their_guards_when_the_checkout_is_not_there` (R16-1 for the hooks: `plugin/` copied somewhere with nothing around it, the gate driven there, and the assertion is the DENY - a gate that cannot find its guards allows, so "nothing crashed" is what the broken version looks like too)
+- [x] `test_plugin_bundle.py` (R16-1: byte-identity per bundled guard, coverage derived from the hooks' AST and the MCP tool table, no unpinned file in the bundle, no `${CLAUDE_PLUGIN_ROOT}/..` in any plugin config, the marketplace `source` resolving to a real plugin, and the bundled MCP server driven over stdio from a temp cwd with `python/` off `sys.path`)
 - [x] `test_each_hook_has_a_selfcheck_that_could_fail` (6.7, in pairs)
 - [x] `--selfcheck` on both hooks: the commit classifier, the `-a` widening,
       the exit-code partitions, the trailer reader, the production/test
