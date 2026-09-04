@@ -88,6 +88,7 @@ copy "$HERE/python/sutradhar_guards/envgate.py"            "$TARGET/tests/sutrad
 copy "$HERE/python/sutradhar_guards/claim_check.py"        "$TARGET/tests/sutradhar/claim_check.py"
 copy "$HERE/python/sutradhar_guards/golden.py"             "$TARGET/tests/sutradhar/golden.py"
 copy "$HERE/python/sutradhar_guards/detectors.py"          "$TARGET/tests/sutradhar/detectors.py"
+copy "$HERE/python/sutradhar_guards/dead_route_lint.py"    "$TARGET/tests/sutradhar/dead_route_lint.py"
 # A place for the loop's records, so `rounds --check` in CI has a directory to
 # read rather than failing on a missing path on the adopter's first push.
 mkdir -p "$TARGET/docs/rounds"

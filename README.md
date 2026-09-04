@@ -132,6 +132,7 @@ sutradhar/
 │   │   ├── verify_guard.py        Proves a guard can fail: reverts the fix, demands red
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
+│   │   ├── dead_route_lint.py     Tests that cannot fail: weak assertions, dead API routes
 │   │   ├── ratchet.py             Library for writing shrink-only class-invariant tests
 │   │   ├── envgate.py             Pytest env-gating that audits its own skip gates
 │   │   ├── claim_check.py         Ground every number in LLM-generated text

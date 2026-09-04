@@ -52,6 +52,32 @@ is the committed suite, and it must assert the things that actually break:
    geometry and scrollWidth are both blind to real overlap defects (we
    proved this against a reproduction, twice).
 
+## The assertion must be able to fail
+
+Two ways an e2e test reports green while testing nothing (doctrine 3.7):
+
+1. **The assertion is too weak.** `expect(status).to.not.eq(500)` passes on
+   404, 403, 401 and 400. Assert the contract you expect.
+2. **The target no longer exists.** A request to a deleted route cannot fail
+   however strong the assertion, because it never reaches real behaviour.
+
+Gate both against the app's own route table, wherever your stack is already
+up (the e2e job usually):
+
+```python
+from sutradhar_guards.dead_route_lint import find_dead_routes
+from sutradhar_guards.ratchet import Ratchet
+
+routes = set(requests.get(f"{API}/openapi.json").json()["paths"])
+Ratchet("tests/baselines/dead_routes.json").assert_only_shrinks(
+    find_dead_routes("cypress/e2e/", routes)
+)
+```
+
+Any route source works - OpenAPI paths, a `rails routes` dump, an Express
+router walk. A real suite hid 28 dead-route references behind "not 500" for
+months. Ask of every check: *what would have to break for this to go red?*
+
 ## Instrumentation is source work
 
 - Give every new component stable testids AT BUILD TIME, one naming idiom

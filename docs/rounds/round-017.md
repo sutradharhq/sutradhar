@@ -21,6 +21,7 @@ findings across the round records still resolves against the rule it named.
 | id | severity | rule | found-by | status | summary |
 |---|---|---|---|---|---|
 | R17-1 | low | 8.1 | self, review | fixed | the two agent packs carried the exit-codes-in-pairs rule under borrowed ids `[6.3, 6.6]`, because the rule that states it (6.7) did not exist in this file. Both packs now cite 6.7. The class is B-19's: a rule that lives in the maintainer's head and not in the doctrine gets cited by whatever number is nearest |
+| R17-2 | med | 6.7 | ratchet, on merge | fixed | the August branch `guard/dead-route-assertions` was merged this round (two commits, `24ef4d3` and `5dd0294`: `dead_route_lint.py`, its tests, rule 3.7). Two ratchets written after the branch refused it: its selfcheck exited 0 and printed nothing, so a pass could not be told from a check that never ran; and it ignored an unknown flag, so `--selfcheck` proved only that the module imported. Both are the 6.7 class the ratchets exist for, on a guard whose subject is assertions that cannot fail. Fixed: the selfcheck names the pairs it exercised, and the CLI refuses an unknown argument with exit 2, matching `detectors.py` |
 
 ## What each item became
 
@@ -60,6 +61,30 @@ findings across the round records still resolves against the rule it named.
   sentence is the crossing; the field is a later mechanism with its own
   false-positive surface, and this round is records-only.
 
+## Merged: `guard/dead-route-assertions`
+
+The one open branch on the remote, authored in August and 35 commits behind
+main, carried a guard and a rule: `dead_route_lint.py` (a weak-assertion
+detector and a dead-route detector, route-source agnostic) and doctrine
+3.7, *an assertion that cannot fail is not a test - and the target must
+exist*. It was merged rather than rebased, so its two commits keep their
+dates and their `Guard-cmd`-less history.
+
+3.7 was read against 3.6 and 2.2 before merging. 3.6 mentions dead routes in
+one parenthesis; 2.2 is about fixes. 3.7 carries the weak-assertion half
+that exists nowhere else, its own scar (44 assertions, 28 aimed at nothing,
+months of green), and its own mechanism, so it enters as a rule and not as
+a sentence on 3.6. Section 3 now has seven rules; the count is 49.
+
+The merge conflicted in two files: `__init__.py`, where main had replaced
+eager imports with a lazy export table (the two functions were added to the
+table), and `CHANGELOG.md` (both entries kept). The guard was wired into
+`bootstrap.sh` (the `python` layer copies it to `tests/sutradhar/`), both
+selfcheck lists in CI, and the README tree. Mutation: with the
+weak-assertion regex replaced by one that never matches, the selfcheck exits
+1 and two of its eight tests go red.
+
 ## Guards touched
 
-None. `rounds.py --backflow` goes green by decision, not by code.
+`dead_route_lint.py`, merged and given a real command line (R17-2).
+`rounds.py --backflow` goes green by decision, not by code.
