@@ -582,19 +582,48 @@ def test_fast_path_costs_about_what_the_interpreter_costs(repo: Path):
     run_hook(GATE, payload)  # warm the filesystem cache
     rounds = 12
 
-    t0 = time.perf_counter()
-    for _ in range(rounds):
-        subprocess.run([sys.executable, "-c", "pass"], capture_output=True)
-    bare = (time.perf_counter() - t0) / rounds
+    # The minimum, not the mean: a startup cost has a floor and noise only
+    # ever adds to it, so on a shared runner the mean measures the runner's
+    # other tenants and the minimum measures the hook (R16-8).
+    def floor(fn):
+        best = None
+        for _ in range(rounds):
+            t0 = time.perf_counter()
+            fn()
+            dt = time.perf_counter() - t0
+            best = dt if best is None or dt < best else best
+        return best
 
-    t0 = time.perf_counter()
-    for _ in range(rounds):
-        run_hook(GATE, payload)
-    hook = (time.perf_counter() - t0) / rounds
+    bare = floor(lambda: subprocess.run([sys.executable, "-c", "pass"], capture_output=True))
+    hook = floor(lambda: run_hook(GATE, payload))
 
     assert hook <= bare * FAST_PATH_BUDGET_FACTOR, (
         f"fast path {hook * 1000:.1f} ms vs bare interpreter {bare * 1000:.1f} ms "
         f"= {hook / bare:.1f}x, over the declared {FAST_PATH_BUDGET_FACTOR}x")
+
+
+HEAVY_FOR_THE_FAST_PATH = ("pathlib", "subprocess", "shlex")
+
+
+def test_fast_path_loads_none_of_the_heavy_modules(repo: Path):
+    """The ratio test is a tripwire with machine-dependent slack: the same
+    imports measured 1.9x on macOS and 3.2x on the Linux runner (R16-8).
+    This one is deterministic. A command that is not a commit must be
+    answered without loading the tokeniser, the spawner or the path
+    library - `-X importtime` lists every module the interpreter loaded.
+    """
+    payload = pre_tool_use(repo, "ls -la")
+    proc = subprocess.run(
+        [sys.executable, "-X", "importtime", str(GATE)],
+        input=json.dumps(payload), capture_output=True, text=True, cwd=repo,
+    )
+    assert proc.returncode == 0, proc.stderr[-500:]
+    loaded = {
+        line.rsplit("|", 1)[1].strip()
+        for line in proc.stderr.splitlines() if line.startswith("import time:")
+    }
+    heavy = sorted(m for m in HEAVY_FOR_THE_FAST_PATH if m in loaded)
+    assert not heavy, f"fast path loaded {heavy} before knowing the command was not a commit"
 
 
 def test_fast_path_factor_matches_the_design_note():

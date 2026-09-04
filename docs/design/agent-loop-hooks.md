@@ -1,6 +1,6 @@
 ---
-sutradhar_scar: R16-1, R16-2, R16-3
-sutradhar_scar_argument: This note entered on `distribution` in round 15 - no finding said a missing session hook had lost anything, and what it argued was placement rather than a new guard. Round 16 paid for it. R16-1 (the plugin referenced `${CLAUDE_PLUGIN_ROOT}/../python`, so it worked only from a checkout and would have failed after a marketplace install), R16-2 (the Stop hook ran a `Guard-cmd:` trailer written by whoever authored HEAD, on the developer's machine) and R16-3 (`verify_guard` ran its command through a shell, reachable from an MCP tool argument written by a model) are all defects in the mechanism this note designs. Two older findings still shape its constraints without founding it and are cited in the text: R14-2 is why it carries a latency budget at all, and R3-1 is why a broken hook allows.
+sutradhar_scar: R16-1, R16-2, R16-3, R16-8
+sutradhar_scar_argument: This note entered on `distribution` in round 15 - no finding said a missing session hook had lost anything, and what it argued was placement rather than a new guard. Round 16 paid for it. R16-1 (the plugin referenced `${CLAUDE_PLUGIN_ROOT}/../python`, so it worked only from a checkout and would have failed after a marketplace install), R16-2 (the Stop hook ran a `Guard-cmd:` trailer written by whoever authored HEAD, on the developer's machine) and R16-3 (`verify_guard` ran its command through a shell, reachable from an MCP tool argument written by a model) are all defects in the mechanism this note designs; R16-8 (the fast path imported `pathlib`, `subprocess` and `re` before deciding the command was a commit, and CI measured 3.2x on Linux against the 3.0x this note declares) is the defect the ratio budget below was written to catch, caught. Two older findings still shape its constraints without founding it and are cited in the text: R14-2 is why it carries a latency budget at all, and R3-1 is why a broken hook allows.
 sutradhar_budget: precommit-gate
 n: 10
 n_unit: gated commits
@@ -299,6 +299,24 @@ An absolute millisecond figure for a path dominated by interpreter startup
 measures the machine, not the change. The ratio does not: it goes red when
 the hook starts doing work — a `git` call, a directory walk, an import —
 before it has established that the command is even a commit.
+
+It did (R16-8). The first shipped fast path imported `pathlib`, `subprocess`
+and, through both, `re` at module level: **1.88x** on the macOS machine it
+was written on, **3.2x** on the Linux CI runner, where a bare interpreter
+starts in 10.7 ms instead of 14 and the same imports are a larger share.
+Now those imports live inside the functions that need them and the
+tokeniser is not even loaded unless the raw command contains `commit` once
+quotes and backslashes are stripped. Re-measured on the same machine,
+minimum of 12 rounds: **19.8 ms against 13.5 ms, 1.47x**. What remains is
+`json`, which imports `re` on its own; that is the floor for a hook whose
+input is JSON. The test takes the **minimum** over its rounds, not the
+mean: a startup cost has a floor and noise only adds to it, so on a shared
+runner the mean measures the neighbours and the minimum measures the hook.
+Beside it, a deterministic guard: `test_fast_path_loads_none_of_the_heavy_modules`
+runs the fast path under `-X importtime` and fails if `pathlib`, `subprocess`
+or `shlex` was loaded on a non-commit command. The ratio's slack depends on
+the machine; this does not, and it is the one that caught the first draft
+of the fix, which had put the lazy import above the early return.
 
 **Bounded output.** Guard output is capped at 8,192 bytes per stream before
 it becomes a `permissionDecisionReason`, and truncation is stated in the

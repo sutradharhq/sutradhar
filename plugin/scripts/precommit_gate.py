@@ -38,9 +38,8 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     import _hooklib as H
 except Exception as exc:  # pragma: no cover - exercised by the import mutant
@@ -76,6 +75,7 @@ def _staged_paths(cwd: str, command: str) -> tuple[list[str], list[str]]:
 
 def _plan(root: Path, staged: list[str]) -> list[tuple[str, list[str] | None, str]]:
     """(guard name, argv or None when inapplicable, why it is inapplicable)."""
+    from pathlib import Path
     gdir = H.guard_dir()
     py = sys.executable or "python3"
     out: list[tuple[str, list[str] | None, str]] = []
@@ -130,6 +130,8 @@ def gate(payload: dict) -> None:
     if not is_commit:
         H.allow_silently()
 
+    # Everything above is the fast path and must stay import-free (R16-8).
+    from pathlib import Path
     cwd = payload.get("cwd") or os.getcwd()
     root = Path(H.git(cwd, "rev-parse", "--show-toplevel").strip())
     staged, disagreeing = _staged_paths(str(root), command)
@@ -198,6 +200,7 @@ def selfcheck() -> bool:
     Doctrine 6.7: an exit code is evidence only in pairs. Every case below
     has a positive and a negative side, because a matcher that answers True
     to everything would pass a one-sided check."""
+    from pathlib import Path
     ok = True
     cases = [
         ("git commit -m 'x'", True), ("cd app && git commit -am wip", True),

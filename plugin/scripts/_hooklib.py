@@ -34,10 +34,14 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
-import subprocess
 import sys
-from pathlib import Path
+
+# `subprocess`, `shlex` and `pathlib` are imported inside the functions that
+# need them, not here. This module is on the PreToolUse fast path, which
+# fires on EVERY Bash call, and those three cost more than a bare
+# interpreter start on a Linux runner (R16-8: 3.2x against a 3.0x budget).
+# A command that is not a commit must cost a JSON parse and a substring
+# check, nothing more.
 
 MARKER = "[sutradhar-hooks]"
 
@@ -158,6 +162,7 @@ def guard_dir() -> Path:
     marketplace (R16-1). `plugin/guards/` is pinned byte-for-byte to
     `python/sutradhar_guards/` by `test_plugin_bundle.py`.
     """
+    from pathlib import Path
     env = os.environ.get("SUTRADHAR_GUARD_DIR")
     bundled = Path(__file__).resolve().parents[1] / "guards"
     root = Path(env) if env else bundled
@@ -172,9 +177,15 @@ def guard_dir() -> Path:
     return root
 
 
-def run(argv: list[str], cwd: str | Path, timeout: int) -> subprocess.CompletedProcess:
+def _timeout_expired():
+    import subprocess
+    return subprocess.TimeoutExpired
+
+
+def run(argv: list[str], cwd: str | Path, timeout: int) -> "subprocess.CompletedProcess":
     """Spawn. argv list only - no `shell=True` anywhere in this plugin, so a
     repo path containing a semicolon is a path and not a command."""
+    import subprocess
     return subprocess.run(
         argv, capture_output=True, text=True, cwd=str(cwd), timeout=timeout,
     )
@@ -191,7 +202,7 @@ def run_guard(name: str, argv: list[str], cwd: str | Path,
     """
     try:
         proc = run(argv, cwd, timeout)
-    except subprocess.TimeoutExpired:
+    except _timeout_expired():
         return GuardRun(name, INSTRUMENT,
                         f"{name} exceeded {timeout}s and was killed. The guard was "
                         f"stopped, which is not the same as the code passing.")
@@ -214,7 +225,7 @@ def run_guard(name: str, argv: list[str], cwd: str | Path,
 def git(cwd: str | Path, *args: str) -> str:
     try:
         proc = run(["git", *args], cwd, GIT_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
+    except _timeout_expired():
         raise InstrumentFailure(f"`git {' '.join(args)}` exceeded {GIT_TIMEOUT_S}s")
     except OSError as exc:
         raise InstrumentFailure(f"git could not be run: {type(exc).__name__}: {exc}")
@@ -248,6 +259,13 @@ def is_git_commit(command: str) -> tuple[bool, bool]:
     an unparseable command the cheap error is a needless 200 ms gate, not a
     missed one.
     """
+    # Fast path first: a token can only normalise to `commit` if the raw
+    # text contains those letters once quotes and backslashes are removed
+    # (`git "com""mit"`, `git com\\mit`). Everything else - the tokeniser
+    # and the `re` it drags in - waits until that is true.
+    if "commit" not in command.replace("\\", "").replace('"', "").replace("'", ""):
+        return False, False
+    import shlex
     try:
         tokens = shlex.split(command)
     except ValueError:
@@ -282,6 +300,7 @@ def commits_all_tracked(command: str) -> bool:
     """`git commit -a` stages tracked modifications at commit time, so the
     index alone does not describe the tree being committed."""
     try:
+        import shlex
         tokens = [_normalise(t) for t in shlex.split(command)]
     except ValueError:
         return True  # cannot tell -> assume the wider scope
