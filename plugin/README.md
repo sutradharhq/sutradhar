@@ -43,8 +43,9 @@ claude --plugin-dir ./plugin
 That loads the plugin for that session only and leaves nothing behind -
 a reasonable way to meet a tool that can deny a commit.
 
-**Before you install it**, run the two hooks' selfchecks. Each one has a
-case it is supposed to fail, so a zero here means something:
+**If you have a checkout**, you can prove the hooks can fail before you
+trust them. Each selfcheck has a case it is supposed to fail, so a zero
+here means something:
 
 ```bash
 python3 plugin/scripts/precommit_gate.py --selfcheck
@@ -67,6 +68,34 @@ runs rather than reaching back into a checkout for them. The copies are
 pinned to `python/sutradhar_guards/` by a test that fails on a one-byte
 difference, and `python3 plugin/sync_guards.py` is what refreshes them.
 
+## What this can do to your machine
+
+Read this before installing. It is short because the answer is short.
+
+| component | reads | writes | runs your commands | network |
+|---|---|---|---|---|
+| pre-commit gate (three lints) | your working tree | nothing | no | no |
+| `Stop` hook | HEAD's commit message | a marker in your temp dir; a throwaway worktree under `.git/worktrees/`, removed after | **yes** — the `Guard-cmd:` trailer, only if you authored HEAD | no |
+| MCP server, eight guard tools | the paths you pass, confined to this repo | nothing | no | no |
+| MCP server, `verify_guard` | a throwaway worktree | that worktree | **yes** — the command the agent passes | no |
+
+The two **yes** cells are the whole risk. Both go through the same parser:
+one program and its arguments, an optional `cd <dir> &&` in front, and
+nothing else. No shell. A pipe, a `;`, a redirect, a backtick or a `$` is
+refused with a message that says why. Any `$` at all is refused, so
+`$HOME` cannot silently become a literal. The worktree is throwaway, but it is
+still your user, your environment and your network — so **do not allowlist
+`verify_guard`** in Claude Code; let it prompt each time.
+
+It never blocks because it broke. A crash in a hook is reported as the
+hook's failure, in those words, and your tool call goes ahead.
+
+Nothing is written to any settings file. Enabling the plugin is a per-session
+act; not enabling it is how you turn it off.
+
+The full statement, including what we found in our own audit and when, is in
+[`SECURITY.md`](../SECURITY.md).
+
 ## What it will and will not do
 
 - **It never blocks because it broke.** A missing guard, a spawn failure, a
@@ -83,7 +112,6 @@ difference, and `python3 plugin/sync_guards.py` is what refreshes them.
   anything in your repository.
 - **It is quiet.** The `Stop` hook says nothing on a turn with nothing to
   report, and reports a given HEAD at most once per session.
-
 - **It will not run a `Guard-cmd:` trailer somebody else wrote.** The
   `Stop` hook runs a trailer only when HEAD's author email matches your
   `git config user.email`. Checking out a pull request is otherwise enough
