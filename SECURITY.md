@@ -11,7 +11,10 @@ manifest appears in the framework surface.
 
 The practical consequence for your supply chain: **there is nothing here to
 compromise on your behalf.** No transitive dependencies, no post-install
-scripts, no network calls, no telemetry. You can read every line that will run
+scripts and no telemetry. One guard makes an outbound request, and only
+when you point it at one: `obsgate.py` reads Prometheus text from a file or
+from an http(s) URL you pass it. Nothing else opens a socket, and nothing
+phones home. You can read every line that will run
 in your CI in a single sitting, and you should — the whole point of copy-in is
 that the code lives in your tree, under your review, pinned to the tag you took.
 
@@ -55,7 +58,14 @@ agent. Treat the tool accordingly:
   `cd <dir> &&`, and `<dir>` must resolve inside the throwaway worktree.
   Pipes, `;`, `&&` elsewhere, redirects, backticks and any `$` are refused
   with a message that says so (a `$` is refused outright rather than passed
-  through as a literal, which would silently run a different check). Anything more complex belongs in a script
+  through as a literal, which would silently run a different check).
+  **This is not a sandbox and does not try to be one.** The command names a
+  program, and you may name an interpreter: `bash -c '...'` and
+  `python3 -c '...'` are accepted, because refusing them would be
+  whack-a-mole against every language with an eval flag. The parser stops a
+  command from *accidentally* becoming a pipeline. It does not stop one that
+  is deliberately hostile, and nothing here should be read as though it
+  did. Anything more complex belongs in a script
   that you name.
 - It runs in a **throwaway git worktree**, so it cannot dirty your checkout.
   A worktree is not a sandbox: it is your user, your `$HOME`, your
@@ -73,9 +83,16 @@ guard is real. Before this section existed, whoever authored HEAD chose a
 command that ran on your laptop: check out a pull request, pull upstream,
 merge a contributor, end the session. Now:
 
-- The hook runs a trailer **only when HEAD's author email is your git
-  `user.email`.** A trailer on someone else's commit is reported, not run,
-  with the one-line command to run it yourself if you choose to.
+- **The hook does not run a trailer. It reports it, and hands you the
+  command.** An earlier version ran it when HEAD's author email matched your
+  git `user.email`. That control was decoration: a git author email is
+  self-asserted, unverified and publicly visible, so anyone crafting a
+  commit can set it to yours, and checking out their branch was enough. It
+  passed against an honest stranger and failed against a real one, which is
+  the exact defect this project exists to name. Set
+  `SUTRADHAR_RUN_TRAILERS=1` if you want the old behaviour on a tree you
+  control; nothing in the default path executes a command chosen by a
+  commit.
 - The same no-shell parser applies, so the trailer is a program and its
   arguments, never a pipeline.
 

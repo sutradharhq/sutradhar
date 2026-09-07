@@ -75,17 +75,18 @@ Read this before installing. It is short because the answer is short.
 | component | reads | writes | runs your commands | network |
 |---|---|---|---|---|
 | pre-commit gate (three lints) | your working tree | nothing | no | no |
-| `Stop` hook | HEAD's commit message | a marker in your temp dir; a throwaway worktree under `.git/worktrees/`, removed after | **yes** — the `Guard-cmd:` trailer, only if you authored HEAD | no |
-| MCP server, eight guard tools | the paths you pass, confined to this repo | nothing | no | no |
+| `Stop` hook | HEAD's commit message | a marker in your temp dir | no — it reports the trailer and hands you the command | no |
+| MCP server, eight guard tools | the paths you pass, confined to this repo | nothing | no | **only `obsgate`**, to a URL you pass it |
 | MCP server, `verify_guard` | a throwaway worktree | that worktree | **yes** — the command the agent passes | no |
 
-The two **yes** cells are the whole risk. Both go through the same parser:
+The one **yes** cell is the whole risk. It goes through a parser:
 one program and its arguments, an optional `cd <dir> &&` in front, and
 nothing else. No shell. A pipe, a `;`, a redirect, a backtick or a `$` is
-refused with a message that says why. Any `$` at all is refused, so
-`$HOME` cannot silently become a literal. The worktree is throwaway, but it is
-still your user, your environment and your network — so **do not allowlist
-`verify_guard`** in Claude Code; let it prompt each time.
+refused with a message that says why. That parser stops a command from
+*accidentally* becoming a pipeline; it is not a sandbox, and naming an
+interpreter (`bash -c '...'`) is accepted. The worktree is throwaway, but it
+is still your user, your environment and your network — so **do not
+allowlist `verify_guard`** in Claude Code; let it prompt each time.
 
 It never blocks because it broke. A crash in a hook is reported as the
 hook's failure, in those words, and your tool call goes ahead.

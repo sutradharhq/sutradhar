@@ -15,17 +15,22 @@ the commit, which is the last moment it is cheap to fix.
 **A trailer is a command, and it runs on this machine.** HEAD is not
 necessarily a commit the person at this keyboard wrote: checking out a pull
 request, pulling upstream, or merging a contributor all make somebody else's
-commit message the input to this hook. So the trailer is run only when
-HEAD's author email matches `git config user.email` in that repository, and
-otherwise the hook says whose commit it is and prints the command to run by
-hand (R16-2). An unset `user.email` is treated as "not mine".
+commit message the input to this hook. Round 16 answered that by running
+the trailer only when HEAD's author email matched `git config user.email`.
+Round 20's review showed that gate is decoration: an author email is
+self-asserted, unverified and public, so a hostile commit sets it to yours
+(R20-5). So by default the hook runs NOTHING a commit chose. It reports the
+trailer and prints the command to run by hand. `SUTRADHAR_RUN_TRAILERS=1`
+opts a tree you control back into auto-run, with the author check kept as a
+speed bump and named as such.
 
 | HEAD                              | verdict      | what happens                  |
 |-----------------------------------|--------------|-------------------------------|
 | trailer, guard goes red on revert | VERIFIED     | silence                       |
 | trailer, guard stays green        | DECORATION   | `decision: "block"` + reason  |
 | trailer, verifier could not tell  | INCONCLUSIVE | said by name, stop proceeds   |
-| trailer, authored by someone else | not run      | who wrote it + the command    |
+| trailer, any author (default)     | not run      | the trailer + the command     |
+| trailer, RUN_TRAILERS=1, foreign  | not run      | who wrote it + the command    |
 | no trailer, prod + test both moved| -            | a reminder, never a block     |
 | anything else                     | -            | silence                       |
 
@@ -167,6 +172,19 @@ def current_user_email(cwd: str | Path) -> str:
         return ""
 
 
+RUN_TRAILERS_ENV = "SUTRADHAR_RUN_TRAILERS"
+
+
+def reported_not_run(sha: str, root: Path, guard_cmd: str) -> str:
+    """What the hook says by default: the trailer, and the command, unrun."""
+    return (f"{H.MARKER} HEAD ({sha[:8]}) carries a guard trailer. This hook "
+            f"does not run it - a commit chooses the command, and whoever "
+            f"authored the commit is not verified by anything git records - "
+            f"so it is reported for you to run:\n  {by_hand(root, guard_cmd)}\n"
+            f"Set {RUN_TRAILERS_ENV}=1 to have the hook run trailers on a tree "
+            f"you control.")
+
+
 def by_hand(root: Path, guard_cmd: str) -> str:
     """The exact one-line command that runs this trailer deliberately."""
     try:
@@ -249,10 +267,21 @@ def check(payload: dict) -> None:
                 + (" ..." if len(prod) > 5 else ""))
         H.allow_silently()
 
-    # Whose command is this? Answered BEFORE the trailer is anywhere near a
-    # subprocess: a Stop hook fires at the end of every turn, and the HEAD it
-    # reads is whatever is checked out - a pulled branch, a contributor's PR,
-    # a merge. Running a stranger's string as the developer is not a check.
+    # The default path never executes a trailer. A Stop hook fires at the end
+    # of every turn, and the HEAD it reads is whatever is checked out - a
+    # pulled branch, a contributor's PR, a merge. The earlier gate ran the
+    # trailer when HEAD's author email matched the local `user.email`, and
+    # that control was decoration: an author email is self-asserted and
+    # public, so a hostile commit sets it to yours and passes (R20-5). The
+    # honest shape is to report the trailer and hand over the command, and
+    # to execute nothing chosen by a commit unless the person running this
+    # tree has said so out loud with SUTRADHAR_RUN_TRAILERS=1.
+    if os.environ.get(RUN_TRAILERS_ENV) != "1":
+        record(mark)
+        H.allow_with_message(reported_not_run(sha, root, guard_cmd))
+
+    # Opted in. The author check stays as a speed bump for the honest case
+    # (a colleague's branch), and is named for what it is: not a boundary.
     user = current_user_email(cwd)
     if not user or author != user:
         record(mark)

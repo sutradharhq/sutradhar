@@ -63,6 +63,7 @@ partial finding list read as a complete one is worse than no list at all.
 from __future__ import annotations
 
 import json
+import re
 import os
 import shlex
 import subprocess
@@ -338,8 +339,44 @@ def _argv_budget(a: dict) -> list[str]:
             "--tests", _string(a, "tests_dir", required=True)]
 
 
+ANY_URL_ENV = "SUTRADHAR_MCP_ANY_URL"
+
+
+def _metrics_source(a: dict) -> str:
+    """`metrics` is a file path inside the confined tree, or - only when the
+    person running the server has said so - a URL.
+
+    `obsgate` is the one guard that opens a socket, and this server hands
+    its `metrics` argument straight to it. Left open, a model (or text a
+    model read from a tool result) could make the server fetch any URL as
+    the user: a metadata endpoint, an internal service, anything the
+    machine can reach (R20-6). So a scheme is refused as a caller error
+    unless SUTRADHAR_MCP_ANY_URL=1, and a path is confined exactly as
+    `repo` is. This is not a network sandbox; it is the same rule `repo`
+    already follows, applied to the one argument that could leave the tree.
+    """
+    raw = _string(a, "metrics", required=True)
+    if re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.I):
+        if os.environ.get(ANY_URL_ENV) == "1":
+            return raw
+        raise _bad_args(
+            f"`metrics` {raw!r} is a URL. This server does not fetch URLs on "
+            f"a model's say-so: point it at a file inside the repository, or "
+            f"set {ANY_URL_ENV}=1 to allow it on a machine you control.")
+    target = Path(raw).expanduser()
+    if os.environ.get(ANY_REPO_ENV) == "1":
+        return str(target)
+    root = confinement_root()
+    resolved = target.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise _bad_args(
+            f"`metrics` {raw} resolves to {resolved}, outside {root} - the "
+            f"repository this server was started in.")
+    return str(resolved)
+
+
 def _argv_obsgate_check(a: dict) -> list[str]:
-    argv = ["check", "--metrics", _string(a, "metrics", required=True),
+    argv = ["check", "--metrics", _metrics_source(a),
             "--floor", _string(a, "floor", required=True)]
     samples = _int(a, "samples")
     if samples is not None:
@@ -351,7 +388,7 @@ def _argv_obsgate_check(a: dict) -> list[str]:
 
 
 def _argv_obsgate_snapshot(a: dict) -> list[str]:
-    return ["snapshot", "--metrics", _string(a, "metrics", required=True),
+    return ["snapshot", "--metrics", _metrics_source(a),
             "--out", _string(a, "out", required=True)]
 
 
@@ -481,7 +518,7 @@ TOOLS: tuple[dict, ...] = (
             "type": "object",
             "properties": {
                 "metrics": {"type": "string",
-                            "description": "A file path or an http(s) URL."},
+                            "description": "A file path inside this repository (a URL is refused unless SUTRADHAR_MCP_ANY_URL=1)."},
                 "floor": {"type": "string"},
                 "samples": {"type": "integer",
                             "description": ">1 finds a frozen exporter."},
@@ -510,7 +547,7 @@ TOOLS: tuple[dict, ...] = (
             "type": "object",
             "properties": {
                 "metrics": {"type": "string",
-                            "description": "A file path or an http(s) URL."},
+                            "description": "A file path inside this repository (a URL is refused unless SUTRADHAR_MCP_ANY_URL=1)."},
                 "out": {"type": "string"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,

@@ -747,3 +747,60 @@ def test_help_exits_0_and_describes_the_server():
     proc = _cli("--help")
     assert proc.returncode == 0
     assert "mcp_server" in proc.stdout
+
+
+# ── R20-6: the one argument that could leave the tree ───────────────────────
+
+def _metrics_file(tmp_path):
+    f = tmp_path / "metrics.txt"
+    f.write_text("# TYPE up gauge\nup 1\n")
+    return f
+
+
+def test_obsgate_refuses_a_url_by_default(tmp_path):
+    """`obsgate` is the only guard that opens a socket, and the server hands
+    `metrics` straight to it. A model, or text a model read from a tool
+    result, must not be able to make this process fetch an arbitrary URL as
+    the user. Refused as a CALLER error, not an instrument failure: nothing
+    broke, the argument is out of bounds."""
+    s = Server(cwd=tmp_path)
+    try:
+        res = s.call_tool("obsgate_check", {
+            "metrics": "http://127.0.0.1:9/metrics",
+            "floor": str(_metrics_file(tmp_path))})
+    finally:
+        s.close()
+    assert res["error"]["code"] == INVALID_PARAMS, res
+    assert "SUTRADHAR_MCP_ANY_URL" in res["error"]["message"], res
+
+
+def test_obsgate_takes_a_url_when_the_operator_opted_in(tmp_path):
+    """The pair (6.7). With the opt-in set the URL must reach obsgate - the
+    answer is INCONCLUSIVE because nothing listens on port 9, and that is
+    the point: it got there. If it did not, the refusal above would be
+    passing because the tool had gone dead."""
+    s = Server(cwd=tmp_path, env_extra={"SUTRADHAR_MCP_ANY_URL": "1"})
+    try:
+        res = s.call_tool("obsgate_check", {
+            "metrics": "http://127.0.0.1:9/metrics",
+            "floor": str(_metrics_file(tmp_path)), "timeout_s": 3})
+    finally:
+        s.close()
+    assert "error" not in res or res["error"]["code"] != INVALID_PARAMS, res
+
+
+def test_obsgate_metrics_path_is_confined_like_repo(tmp_path):
+    inside = _metrics_file(tmp_path)
+    outside = tmp_path.parent / "elsewhere-metrics.txt"
+    outside.write_text("# TYPE up gauge\nup 1\n")
+    s = Server(cwd=tmp_path)
+    try:
+        bad = s.call_tool("obsgate_snapshot", {"metrics": str(outside),
+                                               "out": str(tmp_path / "snap.json")})
+        good = s.call_tool("obsgate_snapshot", {"metrics": str(inside),
+                                                "out": str(tmp_path / "snap.json")})
+    finally:
+        s.close()
+        outside.unlink(missing_ok=True)
+    assert bad["error"]["code"] == INVALID_PARAMS, bad
+    assert "error" not in good or good["error"]["code"] != INVALID_PARAMS, good

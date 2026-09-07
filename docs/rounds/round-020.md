@@ -26,6 +26,9 @@ docs/backflow.md` exits 0 for the first time since round 17.
 | R20-2 | med | 2.2 | the mutation run | fixed | the seam mutant for `interpolation_lint` - `_quoted_at` forced to `True`, which should flood the report with `LIMIT %d` - killed one behavioural test and left the SELFCHECK green. Its only unquoted negative case interpolated `n_limit`, which the numeric-suffix heuristic exempts whatever the quoting says, so the case would have passed for a second reason and proved nothing about quoting. A negative case that is also true for another reason is not a negative case. Rewritten with a name carrying no safe suffix; the mutant now kills the selfcheck too |
 | R20-3 | low | 7.2 | wiring a fifth guard into the pre-commit gate | fixed | `docs/design/agent-loop-hooks.md` listed the three guards the gate ran when it was written. Round 19 added `framework_shape` to `_plan` and did not add the row, so the note described a three-guard gate while the code ran four - the stale-status-doc shape 7.2 is about, inside the design note that documents the mechanism. Both missing rows added |
 | R20-4 | med | 2.2 | cold-start drill on the public clone | fixed | `bootstrap.sh` copied `framework_shape.py` into the adopter's `scripts/` and the next-steps text told them to run it, and `ci/guards.yml` named it in a step. In an adopter's tree that gate scans only its own declared surface directories, which there hold nothing but the files just copied, so it cannot fail: simulated a product with `1,240 kWh` and a dollar amount in `src/` and it exited 0. A guard that cannot fail where we tell somebody to run it is decoration, and shipping one teaches a green that means nothing. `framework_only.py` was already correctly not copied for the same reason - both gate a promise only this repository makes. Removed from the bootstrap python layer, from the next-steps text and from the template, each with the reason written where the step would have been. `ci_step_lint` caught the half-finished change: the template still named a script bootstrap no longer copies, which would have failed an adopter's first push on file-not-found |
+| R20-5 | high | 1.2 | independent review, a different model | fixed | the Stop hook ran a `Guard-cmd:` trailer when HEAD's author email matched the local `git config user.email` (R16-2's fix). That control was decoration: an author email is self-asserted, unverified by anything git records, and public in every commit, so a hostile commit sets it to the victim's and checking out the branch is enough. Reproduced end to end - a commit authored as the local identity whose trailer wrote a sentinel; the sentinel appeared, and the hook returned `block` with a verdict *after* the code had already run. The "not run through a shell" parser does not help: it refuses stray operators, and accepts `bash -c '...'` or `python3 -c '...'` as argv, because they are one program with arguments. Fixed as a seam rather than a stronger check: by default the hook executes nothing a commit chose - it reports the trailer and hands over the one-line command - and `SUTRADHAR_RUN_TRAILERS=1` opts a tree you control back in, with the author check kept and named as a speed bump. A test now carries the hostile fixture and its pair; SECURITY.md and the plugin README say what the parser is and is not |
+| R20-6 | med | 6.10 | independent review | fixed | SECURITY.md said "no network calls" and "no network code anywhere in the plugin or the guards", and the plugin README's table said `network: no` for every row. `obsgate.py` imports `urllib.request` and opens whatever URL its `metrics` argument names, and it is bundled in the plugin and exposed by the MCP server, whose `metrics` argument was not confined the way `repo` is - so a model could make the server fetch any URL as the user. The false sentence was written in round 16 by this project's own reviewer, who grepped `mcp_server.py` and `plugin/scripts/` for socket code and then wrote a claim about "the guards", a larger surface than was measured (6.10 exactly). Fixed: the documents now name `obsgate` as the one guard that makes a request, only to a source you pass it; the MCP server refuses a URL in `metrics` as a caller error unless `SUTRADHAR_MCP_ANY_URL=1` and confines a path as it confines `repo`; three transport tests hold it |
+| R20-7 | low | 2.4 | independent review | fixed | `bootstrap.sh`'s printed next steps carried a dangling half-sentence, `2i. ONLY IF WHAT YOU SHIP IS A FRAMEWORK - keep it from speaking your`, with no command after it. R20-4's edit deleted the command line and the second half of the label and left the first half. It is the first thing an adopter reads after running the install, and it was broken by the fix that made the install honest |
 
 ## What each item became
 
@@ -310,3 +313,38 @@ it before it shipped. The second is that the first run of the drill
 reported exit 127 and it was `timeout`, absent on this platform, inside the
 drill's own wrapper rather than anything in the repository (6.4). A false
 finding about your own front door is still a false finding.
+
+## R20-5 to R20-7: the outside mind
+
+Rule 8.4 says one family of agents shares blind spots with itself, and this
+round tested that literally: after v0.5.0 was cut, a reviewer running on a
+different model was given the public URL, the release notes and the
+instruction to find what would embarrass the author in front of a
+security-literate stranger. It found three things in under fifteen minutes
+that twenty rounds of self-review had not.
+
+The first is the one that matters. The plugin's most security-sensitive
+control, added in round 16 to close a door an audit had found, was itself
+decoration: it compared a field anyone can set with a field anyone can
+read. It passed against an honest stranger and failed against a real one,
+which is the defect this whole project exists to name, sitting in the one
+place it could do the most harm. The fix is not a better check. It is to
+stop executing anything a commit chose, by default, and to say so.
+
+The second is a sentence this project's own reviewer wrote into
+`SECURITY.md` in round 16 after measuring a smaller surface than the claim
+covered. It was false when written, it was repeated in the plugin README's
+table, and it stood through three releases of review by the same lineage.
+6.10 was adopted in round 17. It did not help, because the person who
+needed to apply it had already written the sentence.
+
+The third is a broken line of install text left by the previous round's
+fix. Small, and in the first place a stranger looks.
+
+What the reviewer did not find is recorded too: every doctrine citation
+resolves, every declared budget is enforced, the suite is green on 3.9 and
+3.13, and the "never blocks because it broke" property held under a
+deliberate crash. The review was asked to say so rather than pad, and it
+did. Its closing line is the one to keep: a framework whose pitch is that
+green checks lie shipped a security control that was itself a lying green
+check. That is the reason 8.4 is a rule and not advice.

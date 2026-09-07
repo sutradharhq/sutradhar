@@ -7,6 +7,25 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**SECURITY, and a correction to v0.5.0's claims** (round 20, R20-5 to
+R20-7; found by an independent review after the tag).
+
+- **BREAKING: the `Stop` hook no longer runs a `Guard-cmd:` trailer by
+  default.** It reports the trailer and prints the command. The round-16
+  gate that ran it when HEAD's author email matched yours was decoration:
+  an author email is self-asserted and public, so a hostile commit sets it
+  to yours and checking out the branch is enough. Set
+  `SUTRADHAR_RUN_TRAILERS=1` to opt a tree you control back in.
+- **`SECURITY.md` was wrong about the network.** `obsgate` opens a URL you
+  pass it and always has; the document said no guard did. It now names the
+  one that does. The MCP server refuses a URL in `metrics` unless
+  `SUTRADHAR_MCP_ANY_URL=1`, and confines a path as it confines `repo`.
+- `verify_guard`'s parser is described for what it is: it stops a command
+  from accidentally becoming a pipeline, and accepts `bash -c '...'`,
+  because it is not a sandbox and does not claim to be one.
+- `bootstrap.sh`'s next steps no longer end a sentence mid-air.
+
+
 **Round 20 - the backflow register decided** (record:
 [docs/rounds/round-020.md](docs/rounds/round-020.md)). Nine overdue items,
 eight adopted and one rejected; `rounds.py --backflow` exits 0 again.
