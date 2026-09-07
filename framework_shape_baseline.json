@@ -1,0 +1,12 @@
+{
+  "docs/ai-llm.md::12.4 MW": "the playbook's worked example of the unit-blind grounding incident: a magnitude-only comparison grounded a power figure against a witnessed percentage. The two units have to be different for the example to say anything, and one of them has to be a unit nobody's percentage could be.",
+  "python/sutradhar_guards/claim_check.py::12.4 MW": "the same cross-unit example in the guard's own docstring, where it states what is and is not in scope. Removing it would leave 'cross-unit conversion is out of scope' with nothing behind it.",
+  "python/sutradhar_guards/claim_check.py::2.1Cr": "lakh/crore shorthand in the guard's selfcheck. Indian numbering is a real parsing capability this guard advertises (_MAGNITUDE carries L/lakh/Cr/crore), and a selfcheck that never exercises it would let the capability rot silently - the same reason `sparql` survived the round-18 scrub.",
+  "python/sutradhar_guards/claim_check.py::₹": "the rupee entry in _CURRENCY_UNIT, the table this guard parses. A detector has to contain the symbols it detects.",
+  "python/sutradhar_guards/claim_check.py::€": "the euro entry in _CURRENCY_UNIT, same table, same reason.",
+  "python/sutradhar_guards/claim_check.py::£": "the pound entry in _CURRENCY_UNIT, same table, same reason.",
+  "python/tests/test_claim_check_golden.py::12.4 MW": "the test that pins the cross-unit refusal: 12.4 MW must NOT ground against a witnessed 12.4%. The units must differ or the test asserts nothing.",
+  "python/tests/test_claim_check_golden.py::2.1Cr": "test_extracts_currency_shorthand, the pin on crore parsing. Deleting it deletes the only check that the capability works.",
+  "python/tests/test_claim_check_golden.py::7.7Cr": "test_invented_number_is_flagged, the ungrounded-claim case, which needs a second crore figure the witness set does not contain.",
+  "python/tests/test_claim_check_golden.py::₹": "the rupee symbol in those two fixtures; it is what makes the parsed unit INR rather than a bare number."
+}

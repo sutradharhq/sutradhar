@@ -10,6 +10,7 @@ docstring.
 | `interpolation_lint.py` | No f-string interpolation into query strings without escaping at the site | AST detector over JoinedStr, keyword presets for SQL/SPARQL/Cypher |
 | `ratchet.py` | Your own class invariants, whatever they walk | Shrink-only allowlist library with the guard-the-guard stale check |
 | `envgate.py` | Env-gated test tiers actually run somewhere | Marker auto-skip + an audit that fails when no CI file sets the gate |
+| `framework_shape.py` | A framework surface does not start speaking an adopter's business domain | Domain-unit and currency detector over the shipped surface, baselined with a written reason per entry; `--diff` gates added lines; `--against <corpus>` reports corpus-central terms |
 
 ## Install
 
@@ -17,7 +18,7 @@ There is nothing to install. Copy `sutradhar_guards/` next to your tests
 (or the two lint CLIs into `scripts/`), and copy any tests from `tests/`
 you want as living documentation.
 
-## The pattern all four share
+## The pattern they all share
 
 1. **Detector**: a function that walks source/AST/config and returns
    violations.

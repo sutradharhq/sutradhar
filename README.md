@@ -28,6 +28,18 @@ intentions the same way it tells you to distrust yours: the first dependency
 would be the moment it started becoming a product, so the gate makes that a
 visible decision instead of a quiet drift.
 
+There is a second way to stop being a framework, and it does not touch an
+import list: **start speaking one adopter's business.** Round 18 found exactly
+that - kilowatt-hours beside rupees inside a guard, a meter-billing worked
+example - with `framework_only` green throughout, because every one of those
+files was stdlib-only and declared nothing. `framework_shape.py` is the gate
+for that axis: a numeric literal followed by a domain unit, or a currency
+amount, anywhere in what ships or teaches, against a baseline in which every
+banked entry carries a written reason. `docs/rounds/` and `CHANGELOG.md` are
+exempt, because a record has to be able to name the term it removed. It is a
+floor and says so: it cannot see an ordinary business noun, and the
+`--against <corpus>` mode that can is a maintainer's report, not a gate.
+
 For how this compares to an agent runtime like DeepSeek Harness, see
 [docs/comparisons/deepseek-harness.md](docs/comparisons/deepseek-harness.md) -
 short version: different layers, they compose.
@@ -99,6 +111,7 @@ Stated tool by tool, so you can tell before you clone:
 | `ratchet.py`, `claim_check.py`, `golden.py`, `envgate.py` | **Python test suites** | Libraries you import into your own tests. The patterns port; the code is Python. |
 | `swallow_lint.py`, `interpolation_lint.py`, `detectors.py`, `conflated_degrade_lint.py` | **Python source only** | These four parse a Python AST. The ratchet *pattern* ports to any language in an afternoon; the shipped detectors do not. |
 | `ci_step_lint.py` | **Any stack using GitHub Actions** | It reads workflow YAML with no parser and resolves the script paths a step names; the scripts can be in any language, and only the `.py` ones are checked today. |
+| `framework_shape.py` | **Any repo that ships a framework**, any language | It reads text, not source: a numeric literal followed by a domain unit, and currency, anywhere in the surface you declare. Only useful if what you ship is a framework - a product is *supposed* to speak its own domain. |
 | DOCTRINE.md, `agent/`, `docs/`, `ci/` | **Any stack** | Rules, playbooks, agent packs, CI shape. |
 
 So: the governance, provenance, and observability half of the harness works
@@ -143,6 +156,7 @@ sutradhar/
 │   │   ├── detectors.py           Ready-made ratchet detectors (imports, ORDER BY)
 │   │   ├── obsgate.py             Observability floor as a provenance gate (6.6)
 │   │   ├── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
+│   │   ├── framework_shape.py     ...and keeps it speaking its own vocabulary, not an adopter's
 │   │   └── mcp_server.py          Optional MCP stdio server: the guards as agent-callable tools
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/

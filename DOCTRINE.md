@@ -29,6 +29,10 @@ import the standard library only, and no dependency manifest may appear in the
 framework surface (`examples/` excepted). The first `import requests` or the
 first `requirements.txt` is the moment the framework starts becoming a
 product, and the gate makes that a deliberate diff instead of a quiet drift.
+`framework_shape.py` holds the other half of the same line - a framework can
+also stop being one by starting to speak one adopter's business, so a domain
+unit or a currency amount in what ships or teaches has to be banked with a
+written reason, while a round record stays free to name the term it removed.
 Adopters build products with this; the framework itself stays a framework.
 
 ---

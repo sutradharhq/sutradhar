@@ -46,6 +46,7 @@ from pathlib import Path
 BUNDLED = (
     "budget.py",
     "framework_only.py",
+    "framework_shape.py",
     "interpolation_lint.py",
     "mcp_server.py",
     "obsgate.py",

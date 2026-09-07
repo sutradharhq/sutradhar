@@ -39,11 +39,22 @@ jobs:
           python python/sutradhar_guards/ci_step_lint.py --selfcheck
           python python/sutradhar_guards/obsgate.py --selfcheck
           python python/sutradhar_guards/framework_only.py --selfcheck
+          python python/sutradhar_guards/framework_shape.py --selfcheck
       - name: This repo is still a framework, not a product
         # The guards import stdlib only and no dependency manifest has
         # appeared outside examples/. The first one to break this turns the
         # framework into a product, which must be a deliberate diff.
         run: python python/sutradhar_guards/framework_only.py .
+      - name: This repo still speaks its own vocabulary, not an adopter's
+        # R19-1, the axis framework_only cannot see: the guards had come to
+        # speak one adopter's domain - kilowatt-hours beside rupees, a
+        # meter-billing example - while importing stdlib only and declaring
+        # no dependency, so the framework-only gate was green throughout.
+        # Domain units and currency in the shipped surface, against a
+        # baseline whose every entry carries a reason. docs/rounds/ and
+        # CHANGELOG.md are exempt: a record must be able to name the term it
+        # removed.
+        run: python python/sutradhar_guards/framework_shape.py .
       - name: Every step in this workflow can reach the script it names
         # R18-3, 6.7 applied to CI wiring: a step whose interpreter exits 2 on
         # file-not-found has made a claim about a process and none about the
@@ -92,6 +103,7 @@ jobs:
           python3.9 python/sutradhar_guards/rounds.py --selfcheck
           python3.9 python/sutradhar_guards/obsgate.py --selfcheck
           python3.9 python/sutradhar_guards/framework_only.py --selfcheck
+          python3.9 python/sutradhar_guards/framework_shape.py --selfcheck
 
   examples:
     name: The worked example still catches its planted defects
@@ -147,6 +159,7 @@ jobs:
           test -f /tmp/target/scripts/swallow_lint.py
           test -f /tmp/target/scripts/conflated_degrade_lint.py
           test -f /tmp/target/scripts/ci_step_lint.py
+          test -f /tmp/target/scripts/framework_shape.py
           test -f /tmp/target/cypress/support/uiGuards.ts
           test -f /tmp/target/probe/server.mjs
           test -f /tmp/target/scripts/verify_guard.py
@@ -158,3 +171,4 @@ jobs:
           python3 /tmp/target/scripts/verify_guard.py --selfcheck
           python3 /tmp/target/scripts/budget.py --selfcheck
           python3 /tmp/target/scripts/rounds.py --selfcheck
+          python3 /tmp/target/scripts/framework_shape.py --selfcheck

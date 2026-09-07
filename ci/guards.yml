@@ -53,6 +53,19 @@ jobs:
       - name: Every step above can reach the script it names
         run: python scripts/ci_step_lint.py .
 
+      # ONLY IF WHAT YOU SHIP IS A FRAMEWORK. A product is SUPPOSED to
+      # speak its own business domain, so this gate is nonsense in most
+      # repos and would be red on day one in all of them - which is how a
+      # guard gets muted (R14-2). It keeps a framework surface from
+      # acquiring an adopter's vocabulary: a numeric literal followed by a
+      # domain unit, and currency, against a baseline whose every entry
+      # carries a written reason (there is no --update-baseline).
+      # Uncomment, write scripts/framework_shape_baseline.json, and the
+      # --diff form gates what is ENTERING rather than what is banked.
+      #
+      # - name: The framework does not speak the adopter's domain
+      #   run: python scripts/framework_shape.py . --diff origin/main
+
       # Doctrine 1.1: every number declared in a design note must have a
       # test behind it. A budget nobody enforces reads as a commitment
       # and behaves like a wish.

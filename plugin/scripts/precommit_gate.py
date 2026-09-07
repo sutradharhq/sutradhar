@@ -98,6 +98,24 @@ def _plan(root: Path, staged: list[str]) -> list[tuple[str, list[str] | None, st
         "no swallow_baseline.json - the ratchet has no floor to hold",
     ))
 
+    # `--diff HEAD` gates the lines ENTERING this commit rather than
+    # re-litigating what the baseline already banks; a repo with no baseline
+    # has not declared a framework surface at all, so there is nothing here
+    # to hold and the guard says so by name instead of reporting green.
+    shape_env = os.environ.get("SUTRADHAR_FRAMEWORK_SHAPE_BASELINE")
+    shape = Path(shape_env) if shape_env else next(
+        (c for c in (root / "framework_shape_baseline.json",
+                     root / "scripts" / "framework_shape_baseline.json")
+         if c.is_file()), None)
+    out.append((
+        "framework_shape",
+        [py, str(gdir / "framework_shape.py"), str(root), "--diff", "HEAD",
+         "--baseline", str(shape)]
+        if shape and Path(shape).is_file() else None,
+        "no framework_shape_baseline.json - nothing here declares a "
+        "framework surface to hold to its own vocabulary",
+    ))
+
     rounds_dir = root / "docs" / "rounds"
     argv = None
     if rounds_dir.is_dir():
