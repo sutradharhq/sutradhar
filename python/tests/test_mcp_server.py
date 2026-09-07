@@ -757,16 +757,30 @@ def _metrics_file(tmp_path):
     return f
 
 
-def test_obsgate_refuses_a_url_by_default(tmp_path):
-    """`obsgate` is the only guard that opens a socket, and the server hands
-    `metrics` straight to it. A model, or text a model read from a tool
-    result, must not be able to make this process fetch an arbitrary URL as
-    the user. Refused as a CALLER error, not an instrument failure: nothing
-    broke, the argument is out of bounds."""
+def test_obsgate_reads_loopback_with_no_configuration(tmp_path):
+    """The usability half, asserted first because it is the common case.
+    `obsgate` exists to read a running surface; a dev stack answers on
+    localhost, and needing an env var to look at your own machine would
+    make the tool useless for its own job (R20-8)."""
     s = Server(cwd=tmp_path)
     try:
         res = s.call_tool("obsgate_check", {
             "metrics": "http://127.0.0.1:9/metrics",
+            "floor": str(_metrics_file(tmp_path)), "timeout_s": 3})
+    finally:
+        s.close()
+    assert "error" not in res or res["error"]["code"] != INVALID_PARAMS, res
+
+
+def test_obsgate_refuses_a_host_that_is_not_loopback(tmp_path):
+    """A model, or text a model read out of a tool result, must not be able
+    to make this process fetch a metadata endpoint or an internal service
+    as the user. Refused as a CALLER error: nothing broke, the argument is
+    out of bounds."""
+    s = Server(cwd=tmp_path)
+    try:
+        res = s.call_tool("obsgate_check", {
+            "metrics": "http://169.254.169.254/latest/meta-data/",
             "floor": str(_metrics_file(tmp_path))})
     finally:
         s.close()
@@ -774,15 +788,15 @@ def test_obsgate_refuses_a_url_by_default(tmp_path):
     assert "SUTRADHAR_MCP_ANY_URL" in res["error"]["message"], res
 
 
-def test_obsgate_takes_a_url_when_the_operator_opted_in(tmp_path):
-    """The pair (6.7). With the opt-in set the URL must reach obsgate - the
-    answer is INCONCLUSIVE because nothing listens on port 9, and that is
-    the point: it got there. If it did not, the refusal above would be
-    passing because the tool had gone dead."""
+def test_obsgate_takes_any_host_when_the_operator_opted_in(tmp_path):
+    """The pair (6.7). With the opt-in set the non-loopback host must reach
+    obsgate - INCONCLUSIVE because nothing answers, and that is the point:
+    it got there. If it did not, the refusal above would be passing because
+    the tool had gone dead."""
     s = Server(cwd=tmp_path, env_extra={"SUTRADHAR_MCP_ANY_URL": "1"})
     try:
         res = s.call_tool("obsgate_check", {
-            "metrics": "http://127.0.0.1:9/metrics",
+            "metrics": "http://169.254.169.254/latest/meta-data/",
             "floor": str(_metrics_file(tmp_path)), "timeout_s": 3})
     finally:
         s.close()

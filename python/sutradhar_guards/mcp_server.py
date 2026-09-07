@@ -341,28 +341,49 @@ def _argv_budget(a: dict) -> list[str]:
 
 ANY_URL_ENV = "SUTRADHAR_MCP_ANY_URL"
 
+#: Hosts the inner loop actually points at, and the only ones this server
+#: will fetch without being told to. A dev stack answers on loopback; the
+#: SSRF targets that matter - a cloud metadata endpoint at 169.254.169.254,
+#: a service on another box, anything outside - do not.
+_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"})
+
 
 def _metrics_source(a: dict) -> str:
-    """`metrics` is a file path inside the confined tree, or - only when the
-    person running the server has said so - a URL.
+    """`metrics` is a URL or a file path, and the model does not get a free
+    choice of either.
 
-    `obsgate` is the one guard that opens a socket, and this server hands
-    its `metrics` argument straight to it. Left open, a model (or text a
-    model read from a tool result) could make the server fetch any URL as
-    the user: a metadata endpoint, an internal service, anything the
-    machine can reach (R20-6). So a scheme is refused as a caller error
-    unless SUTRADHAR_MCP_ANY_URL=1, and a path is confined exactly as
-    `repo` is. This is not a network sandbox; it is the same rule `repo`
-    already follows, applied to the one argument that could leave the tree.
+    `obsgate` is the one guard that opens a socket, and reading a running
+    surface is its whole job - refusing URLs would leave it useless for the
+    thing it exists to do (R20-8). So loopback is allowed with no
+    configuration, which is where a dev stack answers. Any other host is
+    refused as a caller error unless SUTRADHAR_MCP_ANY_URL=1, because a
+    model, or text a model read out of a tool result, must not be able to
+    make this process fetch a cloud metadata endpoint or an internal
+    service as the user (R20-6). A file path is confined exactly as `repo`
+    is.
+
+    The CLI is untouched: `obsgate.py --metrics <anything>` still fetches
+    whatever you name. This bounds the surface a MODEL can reach, not the
+    guard.
     """
     raw = _string(a, "metrics", required=True)
-    if re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.I):
+    # The bracketed form FIRST: `[^/:]+` matches a bare `[` and stops at the
+    # colon, so `http://[::1]:9090` yields the host `[` and a loopback URL
+    # gets refused. Alternation order is the whole fix.
+    m = re.match(r"^([a-z][a-z0-9+.-]*)://(\[[^\]]+\]|[^/:]+)", raw, re.I)
+    if m:
         if os.environ.get(ANY_URL_ENV) == "1":
             return raw
+        scheme, host = m.group(1).lower(), m.group(2).lower()
+        if scheme in ("http", "https") and host in _LOOPBACK:
+            return raw
         raise _bad_args(
-            f"`metrics` {raw!r} is a URL. This server does not fetch URLs on "
-            f"a model's say-so: point it at a file inside the repository, or "
-            f"set {ANY_URL_ENV}=1 to allow it on a machine you control.")
+            f"`metrics` {raw!r} points at {host!r}. This server fetches "
+            f"loopback without being asked, and nothing else on a model's "
+            f"say-so - a metadata endpoint or an internal service is one "
+            f"string away. Point it at localhost, pass a file, or set "
+            f"{ANY_URL_ENV}=1 on a machine you control. The `obsgate` CLI "
+            f"is not restricted.")
     target = Path(raw).expanduser()
     if os.environ.get(ANY_REPO_ENV) == "1":
         return str(target)
@@ -518,7 +539,7 @@ TOOLS: tuple[dict, ...] = (
             "type": "object",
             "properties": {
                 "metrics": {"type": "string",
-                            "description": "A file path inside this repository (a URL is refused unless SUTRADHAR_MCP_ANY_URL=1)."},
+                            "description": "A loopback http(s) URL, or a file path inside this repository. Another host is refused unless SUTRADHAR_MCP_ANY_URL=1 (the CLI is unrestricted)."},
                 "floor": {"type": "string"},
                 "samples": {"type": "integer",
                             "description": ">1 finds a frozen exporter."},
@@ -547,7 +568,7 @@ TOOLS: tuple[dict, ...] = (
             "type": "object",
             "properties": {
                 "metrics": {"type": "string",
-                            "description": "A file path inside this repository (a URL is refused unless SUTRADHAR_MCP_ANY_URL=1)."},
+                            "description": "A loopback http(s) URL, or a file path inside this repository. Another host is refused unless SUTRADHAR_MCP_ANY_URL=1 (the CLI is unrestricted)."},
                 "out": {"type": "string"},
                 "repo": _REPO,
                 "timeout_s": _TIMEOUT,

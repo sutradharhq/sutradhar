@@ -75,6 +75,14 @@ agent. Treat the tool accordingly:
   allowlisted arbitrary execution by the agent.
 - The `repo` argument is confined to the git repository the server was
   started in. `SUTRADHAR_MCP_ANY_REPO=1` lifts that, deliberately, by you.
+- **One guard reaches the network, and only where you point it.**
+  `obsgate` reads Prometheus text from a file or an http(s) URL; that is
+  its job. Through the MCP server, where the argument comes from a model,
+  it reads **loopback** without being asked - which is where a dev stack
+  answers - and refuses any other host unless `SUTRADHAR_MCP_ANY_URL=1`.
+  A metadata endpoint or an internal service is otherwise one string away
+  from anything a model read in a tool result. The `obsgate` CLI is not
+  restricted; this bounds what a MODEL can reach, not what you can.
 
 **2. The `Stop` hook runs the `Guard-cmd:` trailer on HEAD.** When your
 agent's turn ends, the hook reads HEAD's commit message and, if it carries a
@@ -83,16 +91,22 @@ guard is real. Before this section existed, whoever authored HEAD chose a
 command that ran on your laptop: check out a pull request, pull upstream,
 merge a contributor, end the session. Now:
 
-- **The hook does not run a trailer. It reports it, and hands you the
-  command.** An earlier version ran it when HEAD's author email matched your
-  git `user.email`. That control was decoration: a git author email is
+- **The hook runs a trailer only on a commit that is not yet on any
+  remote.** An earlier version ran it when HEAD's author email matched your
+  git `user.email`. That control was decoration: an author email is
   self-asserted, unverified and publicly visible, so anyone crafting a
-  commit can set it to yours, and checking out their branch was enough. It
+  commit sets it to yours, and checking out their branch was enough. It
   passed against an honest stranger and failed against a real one, which is
-  the exact defect this project exists to name. Set
-  `SUTRADHAR_RUN_TRAILERS=1` if you want the old behaviour on a tree you
-  control; nothing in the default path executes a command chosen by a
-  commit.
+  the defect this project exists to name.
+
+  The question now is one an attacker cannot answer for you: **is HEAD
+  already published?** Fetching, pulling, and checking out a pull request
+  all leave HEAD reachable from `refs/remotes/*`. The commit you just made
+  is not, so your own work still gets checked automatically and the normal
+  loop is unchanged. Anything that arrived from elsewhere is reported with
+  the command, and run by you or not at all. A repository that cannot
+  answer the question is treated as published.
+  `SUTRADHAR_RUN_TRAILERS=1` runs them regardless.
 - The same no-shell parser applies, so the trailer is a program and its
   arguments, never a pipeline.
 

@@ -120,9 +120,9 @@ def marks(tmp_path: Path) -> dict:
     return {"TMPDIR": str(d)}
 
 
-#: The Stop hook runs a trailer ONLY when the tree's owner has opted in
-#: (R20-5). Tests of the run path say so explicitly; a test without it is
-#: exercising the default, which reports and executes nothing.
+#: Forces the run path regardless of where HEAD came from. The fixture
+#: repository has no remote, so the default already runs; this is only for
+#: asserting the override itself.
 RUN = {"SUTRADHAR_RUN_TRAILERS": "1"}
 
 
@@ -334,7 +334,7 @@ def test_a_missing_guard_directory_is_an_instrument_failure(
     # The Stop branch only reaches the guard directory on the opted-in run
     # path; by default it reports the trailer and never looks (R20-5).
     proc = run_hook(script, payload,
-                    {"SUTRADHAR_GUARD_DIR": "/nope/not/here", **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": "/nope/not/here", **marks(tmp_path)})
     assert proc.returncode == 0
     body = out(proc)
     assert "decision" not in body and "hookSpecificOutput" not in body
@@ -392,7 +392,7 @@ def test_stop_hook_blocks_on_decoration(repo: Path, tmp_path: Path):
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=1)
     proc = run_hook(DONE, stop(repo),
-                    {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
     body = out(proc)
     assert body["decision"] == "block", body
     assert "DECORATION" in body["reason"]
@@ -407,7 +407,7 @@ def test_stop_hook_reports_inconclusive_as_inconclusive(repo: Path, tmp_path: Pa
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=2)
     proc = run_hook(DONE, stop(repo),
-                    {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
     body = out(proc)
     assert "decision" not in body, body
     assert "INCONCLUSIVE" in body["systemMessage"]
@@ -418,7 +418,7 @@ def test_stop_hook_is_silent_when_the_guard_is_verified(repo: Path, tmp_path: Pa
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=0)
     proc = run_hook(DONE, stop(repo),
-                    {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
     assert proc.returncode == 0 and proc.stdout == "", proc.stdout
 
 
@@ -428,7 +428,7 @@ def test_stop_hook_respects_stop_hook_active(repo: Path, tmp_path: Path):
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=1)
     proc = run_hook(DONE, stop(repo, active=True),
-                    {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
     assert proc.returncode == 0 and proc.stdout == ""
 
 
@@ -437,7 +437,7 @@ def test_stop_hook_reports_a_head_once_per_session(repo: Path, tmp_path: Path):
     on every one of them is how this hook would earn its own uninstall."""
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=1)
-    env = {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)}
+    env = {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)}
     first = run_hook(DONE, stop(repo, session="s1"), env)
     second = run_hook(DONE, stop(repo, session="s1"), env)
     assert out(first)["decision"] == "block"
@@ -483,7 +483,7 @@ def test_stop_hook_will_not_run_someone_elses_trailer(repo: Path, tmp_path: Path
         cwd=str(repo), capture_output=True, text=True, timeout=60, check=True,
     )
 
-    proc = run_hook(DONE, stop(repo), {**RUN, **marks(tmp_path)})
+    proc = run_hook(DONE, stop(repo), marks(tmp_path))
     body = out(proc)
     assert "decision" not in body, body
     assert "someone-else@example.com" in body["systemMessage"], body
@@ -510,7 +510,7 @@ def test_stop_hook_will_not_run_a_trailer_when_the_repo_has_no_identity(
         # global file, which on a developer's machine is set. The hook must
         # be tested against a repository that genuinely has no identity.
         "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull,
-        **RUN, **marks(tmp_path)})
+        **marks(tmp_path)})
     body = out(proc)
     assert "decision" not in body, body
     assert "no `user.email` set" in body["systemMessage"], body
@@ -523,7 +523,7 @@ def test_stop_hook_runs_the_trailer_when_the_commit_is_yours(
     commit_with_trailer(repo)
     stubs = stub_guards(tmp_path, verify_guard=1)
     proc = run_hook(DONE, stop(repo),
-                    {"SUTRADHAR_GUARD_DIR": str(stubs), **RUN, **marks(tmp_path)})
+                    {"SUTRADHAR_GUARD_DIR": str(stubs), **marks(tmp_path)})
     body = out(proc)
     assert body.get("decision") == "block", body
     assert "DECORATION" in body["reason"]
@@ -547,38 +547,67 @@ def _hostile_head(repo: Path, tmp_path: Path, author_email: str) -> Path:
     return sentinel
 
 
-def test_stop_hook_runs_nothing_a_commit_chose_even_when_the_author_is_you(
+def _publish(repo: Path, tmp_path: Path) -> None:
+    """Give the fixture a remote that already contains HEAD - what a fetch,
+    a pull or a checked-out pull request leaves behind."""
+    bare = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)],
+                   capture_output=True, text=True, timeout=60, check=True)
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
+
+
+def test_stop_hook_runs_nothing_that_arrived_from_a_remote(
         repo: Path, tmp_path: Path):
     """R20-5. The round-16 gate compared HEAD's author email with the local
-    `user.email` and ran the trailer on a match. An author email is
-    self-asserted and public: a hostile commit sets it to yours, and
-    checking out that branch was enough. Here the author IS `t@example.com`,
-    exactly the local identity - and by default the hook must still execute
-    nothing. It reports the trailer and the command."""
+    `user.email`. An author email is self-asserted and public, so a hostile
+    commit sets it to yours and checking out that branch was enough. Here
+    the author IS `t@example.com`, the local identity - and because HEAD is
+    on a remote, nothing it chose may run."""
     sentinel = _hostile_head(repo, tmp_path, "t@example.com")
+    _publish(repo, tmp_path)
     proc = run_hook(DONE, stop(repo), marks(tmp_path))
     body = out(proc)
     assert "decision" not in body, body
-    assert "does not run it" in body["systemMessage"], body
+    assert "already on a remote" in body["systemMessage"], body
     assert "verify_guard.py" in body["systemMessage"], body
-    assert "SUTRADHAR_RUN_TRAILERS" in body["systemMessage"], body
     assert not sentinel.exists(), (
-        "the hook RAN a command chosen by a commit because its author email "
-        "matched yours. That field is whatever the committer typed.")
+        "the hook RAN a command chosen by a commit that arrived from a "
+        "remote, because its author email matched yours. That field is "
+        "whatever the committer typed.")
 
 
-def test_the_opt_in_is_live_so_the_default_is_what_stops_it(
+def test_stop_hook_still_runs_your_own_unpushed_trailer(
         repo: Path, tmp_path: Path):
-    """The pair to the test above (6.7): the same hostile HEAD with the
-    opt-in set DOES reach execution. If this stopped writing the sentinel,
-    the test above would be passing because the whole hook had gone dead,
-    not because the default refuses."""
+    """The pair (6.7), and the usability half: the hook's whole job is to
+    check the guard on the commit you just made. Same hostile fixture, NOT
+    published - it runs. If this went silent, the test above would be
+    passing because the hook had gone dead rather than because it refuses."""
     sentinel = _hostile_head(repo, tmp_path, "t@example.com")
-    proc = run_hook(DONE, stop(repo), {**RUN, **marks(tmp_path)})
+    proc = run_hook(DONE, stop(repo), marks(tmp_path))
     out(proc)
     assert sentinel.exists(), (
-        "with SUTRADHAR_RUN_TRAILERS=1 and a matching author the trailer "
-        "should have run; if it did not, the default's silence proves nothing")
+        "a trailer on your own unpushed commit must still run; refusing "
+        "everything would make the hook safe by making it useless")
+
+
+def _hostile_head(repo: Path, tmp_path: Path, author_email: str) -> Path:
+    """A commit whose trailer writes a sentinel, authored as `author_email`.
+
+    The author email is whatever the committer says it is; nothing git
+    records verifies it."""
+    sentinel = tmp_path / "the-trailer-ran"
+    script = tmp_path / "trailer.py"
+    script.write_text(f"open({str(sentinel)!r}, 'w').close()\n")
+    trailer = f"{shlex.quote(sys.executable)} {shlex.quote(str(script))}"
+    stage(repo, "app/query.py", CLEAN_SOURCE)
+    subprocess.run(
+        ["git", "-c", "user.name=Anyone", "-c", f"user.email={author_email}",
+         "commit", "-q", "-m", f"fix\n\nGuard-cmd: {trailer}"],
+        cwd=str(repo), capture_output=True, text=True, timeout=60, check=True,
+    )
+    return sentinel
 
 
 def test_stop_hook_is_silent_on_a_docs_only_commit(repo: Path, tmp_path: Path):

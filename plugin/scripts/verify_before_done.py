@@ -29,8 +29,9 @@ speed bump and named as such.
 | trailer, guard goes red on revert | VERIFIED     | silence                       |
 | trailer, guard stays green        | DECORATION   | `decision: "block"` + reason  |
 | trailer, verifier could not tell  | INCONCLUSIVE | said by name, stop proceeds   |
-| trailer, any author (default)     | not run      | the trailer + the command     |
-| trailer, RUN_TRAILERS=1, foreign  | not run      | who wrote it + the command    |
+| trailer, HEAD on a remote         | not run      | the trailer + the command     |
+| trailer, HEAD local + yours       | VERIFIED/... | as below                      |
+| trailer, HEAD local, not your name| not run      | who wrote it + the command    |
 | no trailer, prod + test both moved| -            | a reminder, never a block     |
 | anything else                     | -            | silence                       |
 
@@ -175,14 +176,40 @@ def current_user_email(cwd: str | Path) -> str:
 RUN_TRAILERS_ENV = "SUTRADHAR_RUN_TRAILERS"
 
 
-def reported_not_run(sha: str, root: Path, guard_cmd: str) -> str:
-    """What the hook says by default: the trailer, and the command, unrun."""
-    return (f"{H.MARKER} HEAD ({sha[:8]}) carries a guard trailer. This hook "
-            f"does not run it - a commit chooses the command, and whoever "
-            f"authored the commit is not verified by anything git records - "
-            f"so it is reported for you to run:\n  {by_hand(root, guard_cmd)}\n"
-            f"Set {RUN_TRAILERS_ENV}=1 to have the hook run trailers on a tree "
-            f"you control.")
+def reported_not_run(sha: str, root: Path, guard_cmd: str,
+                     published: "bool | None") -> str:
+    """What the hook says when it will not run the trailer, and why."""
+    why = ("it is already on a remote, so it came from a fetch, a pull or a "
+           "checked-out branch rather than from you"
+           if published else
+           "this repository could not say whether it came from a remote")
+    return (f"{H.MARKER} HEAD ({sha[:8]}) carries a guard trailer and this "
+            f"hook did not run it: {why}. A commit chooses the command, and "
+            f"nothing git records verifies who wrote it, so it is reported "
+            f"for you to run:\n  {by_hand(root, guard_cmd)}\n"
+            f"Trailers on your own unpushed commits still run automatically. "
+            f"Set {RUN_TRAILERS_ENV}=1 to run them regardless.")
+
+
+def came_from_a_remote(cwd) -> "bool | None":
+    """Is HEAD already published on a remote-tracking ref?
+
+    This is the question the author-email check was a bad proxy for. A
+    trailer is dangerous when the commit came from somebody else, and every
+    way it arrives - checking out a pull request, fetching a branch,
+    pulling upstream - leaves HEAD reachable from a `refs/remotes/*` ref.
+    Your own commit, the one this hook exists to check, is not on a remote
+    yet. Unlike an author email, an attacker cannot set this: making your
+    HEAD local-and-unpushed is not something a commit can do to you.
+
+    None means the question could not be answered, and the caller then
+    treats it as "not mine" rather than guessing (2.9).
+    """
+    try:
+        out = H.git(cwd, "branch", "-r", "--contains", "HEAD")
+    except H.InstrumentFailure:
+        return None
+    return bool([ln for ln in out.splitlines() if ln.strip()])
 
 
 def by_hand(root: Path, guard_cmd: str) -> str:
@@ -276,14 +303,19 @@ def check(payload: dict) -> None:
     # honest shape is to report the trailer and hand over the command, and
     # to execute nothing chosen by a commit unless the person running this
     # tree has said so out loud with SUTRADHAR_RUN_TRAILERS=1.
-    if os.environ.get(RUN_TRAILERS_ENV) != "1":
+    forced = os.environ.get(RUN_TRAILERS_ENV) == "1"
+    published = came_from_a_remote(cwd)
+    if not forced and published is not False:
+        # Published, or unanswerable. Either way the commit is not the local
+        # work this hook exists to check, so nothing it chose is executed.
         record(mark)
-        H.allow_with_message(reported_not_run(sha, root, guard_cmd))
+        H.allow_with_message(reported_not_run(sha, root, guard_cmd, published))
 
-    # Opted in. The author check stays as a speed bump for the honest case
-    # (a colleague's branch), and is named for what it is: not a boundary.
+    # HEAD is local and unpushed: your own work. The author check stays as a
+    # speed bump for the honest case - a colleague's commit you cherry-picked
+    # - and is named as one, because an author email proves nothing (R20-5).
     user = current_user_email(cwd)
-    if not user or author != user:
+    if not forced and (not user or author != user):
         record(mark)
         H.allow_with_message(not_my_commit(author, user, sha, root, guard_cmd))
 
