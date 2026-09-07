@@ -7,6 +7,38 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**New guard: `framework_shape.py`** (round 19, R19-1; record:
+[docs/rounds/round-019.md](docs/rounds/round-019.md)). The axis
+`framework_only` cannot see - a framework that has started speaking one
+adopter's business while importing stdlib only and declaring no dependency.
+
+- Flags a numeric literal immediately followed by a **domain unit** (65 units
+  across 8 industries: energy, oil and gas, agriculture, healthcare, freight,
+  retail, real estate, currency) and any **currency symbol**, anywhere in the
+  framework surface - the guards, their tests, `examples/`, `js/`, `plugin/`,
+  `README.md`, `DOCTRINE.md`, `SECURITY.md` and `docs/`. An explicit
+  `_ENGINEERING_UNITS` allowlist (84 units the framework measures itself in)
+  is never flagged, and the selfcheck asserts the two lists are disjoint.
+- `docs/rounds/` and `CHANGELOG.md` are **exempt**: a record must be free to
+  name the term it removed.
+- **Baseline format**: a JSON object of `path::matched-text` -> reason. **An
+  entry with no reason is refused (exit 2), not skipped.** There is
+  deliberately **no `--update-baseline`** - banking is done by hand, because
+  the reason is the decision.
+- `--diff <ref>` runs the same check over ADDED lines only; this is the mode
+  the pre-commit hook uses (`--diff HEAD`), and it is skipped by name when the
+  repo has no `framework_shape_baseline.json`.
+- `--against <corpus>` is a maintainer's **report, never a gate and never in
+  CI**: it ranks the terms central in a corpus tree that are also present in
+  the surface. It exists because check 1 cannot see an ordinary business noun.
+- Exit 0 clean, 1 a finding or a stale banked entry, 2 the check could not
+  run. Wired into this repo's CI (selfcheck on 3.12 and 3.9 plus a real run),
+  `bootstrap.sh` (`scripts/framework_shape.py`), the plugin bundle (now nine
+  guard programs) and the pre-commit hook. Commented, with its
+  "only if what you ship is a framework" condition, in `ci/guards.yml`.
+- `DOCTRINE.md`'s "What this repository is" preamble gains one sentence naming
+  what the gate holds. No rule was added or renumbered.
+
 **The framework stopped speaking the product's domain** (round 18, R18-5).
 `claim_check.py`, its tests, the budget guard's docstring and the worked
 example carried an adopter thread's subject matter - a regulator-facing
