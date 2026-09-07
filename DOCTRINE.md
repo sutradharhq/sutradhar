@@ -85,6 +85,18 @@ the guard in a thread whose context write was discarded, and no test noticed
 because no test went through the route.* The revert half is mechanical -
 `verify_guard.py` runs it in a throwaway worktree and exits nonzero when the
 guard survives the revert; the weaken-the-seam half is still yours to run.
+Mutate the line that RUNS. A mutation applied to a declaration, a constant, or
+a string on a path the test never reaches cannot change an outcome, and the
+"no change" it reports reads as *the guard is decoration* when it far more
+often means *the mutation never executed* - so name the executing line before
+editing it, and put the command that showed the mutant red in the record.
+*Practice, not scar (B-21), and its sixth occurrence: it strengthens this
+rule's mechanism and founds nothing. Two from one week are worth naming
+generically - a review compared object representations that embedded the very
+line numbers under test and read "identical: false" off its own harness bug;
+and a test written to pin a configuration list was parametrised over that same
+list, so deleting an entry deleted the case that would have objected and the
+suite went from 205 green to 204 green.*
 
 **2.3 Test through the real seam** (the route, the transport, the public
 function), never by poking internals the production path does not use.
@@ -107,7 +119,13 @@ grows with real usage carries a cap and an honest too-large refusal. ORDER
 BY on an unbounded result set is a memory bomb. *Scar: see 1.1. Also: a
 "latest timestamp" lookup that was O(1) when data existed and a full-table
 walk when it did not, so exactly the newly-onboarded customer with no data
-timed out on day one.*
+timed out on day one.* A cap must count the unit that GROWS. A limit on
+inbound items does not bound the output when one item fans out: a limit of a
+thousand admitted roughly a hundred thousand rows once each item expanded per
+interval. *Scar: the expansion was added by the change immediately before it,
+so a fan-out landing on Monday silently un-bounded Friday's cap (B-25). The
+cap and the thing it caps drift apart in a diff that contains only one of
+them, which is why the unit is the part to state.*
 
 **2.7 Exceptions are never silently swallowed.** An `except` block logs,
 degrades explicitly, or re-raises. Returning an empty value from a bare
@@ -285,7 +303,7 @@ verification read a queryable proxy three times while the surface a person
 actually saw disagreed throughout (round 3); a review read exit 0 from five
 tools whose selfchecks did not exist - the process terminated, nothing was
 witnessed, and the zero was reported as a pass (round 4). Both times the
-proxy agreed, so the looking stopped.* A job's success carries its output count: a run that succeeds and produces nothing is a failure unless zero was declared expected, so the floor for a job is rows-per-run, not only fired-succeeded-failed. *Scar: a training loop ran thirty days at zero rows under green status, because the job counter could not tell a silent zero from a full run (B-4).* Everything past this line - dashboards, tracing, alerting, SLOs - stays out of the doctrine until an incident pays its way in.
+proxy agreed, so the looking stopped.* A job's success carries its output count: a run that succeeds and produces nothing is a failure unless zero was declared expected, so the floor for a job is rows-per-run, not only fired-succeeded-failed. *Scar, twice and independently: a training loop ran thirty days at zero rows under green status, because the job counter could not tell a silent zero from a full run (B-4); and a document generator exited 0 having written a file with no entries in it (B-24). Two threads paid separately for the same sentence, and convergence at that width is the strongest evidence 8.1 accepts - so B-24 landed here, on the rule already in the file, and not as a rule of its own.* A claim about a running system is verified against the running system, and that includes the claims made in public copy: an audit fetched the live site and found production nine commits and a month behind the tree, still serving a name the repository documented as wrong and 404ing its own security page, and nothing in the tree could have said so. The mechanism is a build/version surface the deployment serves about itself, so what is running can be asked rather than inferred from what was merged. *Scar: B-26, and it is where 5.1 and this rule meet - a claim read off the repository about a deployment is an unwitnessed number wearing a commit hash.* Everything past this line - dashboards, tracing, alerting, SLOs - stays out of the doctrine until an incident pays its way in.
 
 **6.7 An exit code is not a witness.** It is a claim about a process, not
 about a check. It is evidence only in pairs: a known-good input exits 0 AND a
