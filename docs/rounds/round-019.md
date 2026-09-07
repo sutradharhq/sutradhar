@@ -22,6 +22,7 @@ gained one sentence describing what the new gate holds.
 | R19-1 | med | 8.1 | building the mechanism R18-5 asked for | fixed | `framework_only.py` gates "a framework, not a product" on an import list and the absence of a manifest, and neither can see a framework that has started speaking an adopter's business. Shipped as `framework_shape.py`: a numeric literal immediately followed by a **domain unit** (kilowatt-hours, barrels, tonnes, acres, patients, beds, lakh/crore - 65 units across 8 industries, deliberately not energy-only) or a **currency symbol**, anywhere in what ships or teaches, against a baseline in which **every banked entry carries a written reason and a row without one is refused**. There is no `--update-baseline`: banking here is the act of writing the sentence. `docs/rounds/` and `CHANGELOG.md` are exempt, which is the difference between a record and a leak. Wired into CI (selfcheck on 3.12 and 3.9, plus a real run over this repository), into `bootstrap.sh`, and into the pre-commit hook in `--diff` mode so an agent's commit is gated at entry |
 | R19-2 | med | 2.9 | stating the new gate's reach before trusting it | closed | the shipped gate **cannot find an ordinary business noun**, and nothing self-contained can: no property of this repository separates `device` (fine) from `meter` (the leak R18-5 actually found, 12 occurrences here and 3,688 in the private tree). The signal exists only relative to a corpus the public repository does not have. So `framework_shape.py` is a **floor and not a proof**, it says that on every green run, and the corpus-relative check that can see the noun ships as `--against <corpus>` - a maintainer's report, run locally, never in CI, printing a ranked list for a person rather than a verdict. Recorded as a finding rather than a caveat because a gate whose limit is only in a docstring is a gate somebody will read as complete |
 | R19-3 | low | 6.11 | the guard's own mutation run | fixed | the new guard's selfcheck indexed `flat[0]` and `found[0]` before checking either list was non-empty, so the mutant that blinds the detector - `scan_text` returning `[]`, the exact vacuity the selfcheck exists to catch - killed the instrument with an `IndexError` instead of producing a red verdict, and took every later case in the run with it. Found by writing the blinded-detector test, not by reading. Second occurrence of 6.11 in two rounds, on the first guard written since round 18 filed the same shape against `ci_step_lint`; shapes are validated before they are indexed now |
+| R19-4 | med | 2.2 | review mutation | fixed | the gate declared its own surface as a tuple of directories, and nothing behavioural read it. Dropping `examples` from `SURFACE_DIRS` left all 749 tests green while the gate went blind to the exact material it was built for - round 18's leak lived in `examples/`, and every other test asserted on `docs/`. Fixed with a pinned expected set. The first fix was itself vacuous in the same way: it parametrised over `fs.SURFACE_DIRS`, so deleting an entry deleted the case that would have complained and 205 tests became 204 and stayed green. A guard whose fixtures come from the thing it guards cannot see a deletion. The pinned list is written out by hand and compared, and the mutation now fails with the directory named |
 
 ## R19-1: the gate that was measured and rejected first
 
@@ -195,3 +196,21 @@ eight deadlines to make a gate go green is the R15-4 shape that rounds 16 and
 added or renumbered) and `docs/design/agent-loop-hooks.md`.
 
 550 tests before, 749 after.
+
+## R19-4: a declared surface nothing walks
+
+The gate lists the directories it covers. That list is configuration, and
+configuration is exactly what a test suite forgets to read: 199 new tests
+went in with this gate and not one of them asserted that `examples/` was
+among them. Deleting it passed everything, and the gate then reported a
+clean tree while the round-18 leak sat restored in front of it.
+
+The interesting part is the first fix. It parametrised the check over
+`fs.SURFACE_DIRS`, which reads correctly and is worthless: removing an entry
+removes the case that would object, so the suite went from 205 to 204 and
+stayed green. Fixtures drawn from the thing under test cannot see a
+deletion in it. The pin is written out by hand now, which is the only shape
+that can fail.
+
+This is 3.6 turned on the gate's own configuration. A directory can be
+declared and unreachable, and counting the declarations measures nothing.

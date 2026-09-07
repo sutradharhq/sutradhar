@@ -426,3 +426,64 @@ def test_ci_runs_the_full_scan_over_this_repository():
     would have caught round 18's leak."""
     ci = (REPO / ".github" / "workflows" / "selftest.yml").read_text()
     assert "framework_shape.py ." in ci
+
+
+# ── the declared surface is actually reached (found by mutation, R19-4) ──────
+
+def _a_domain_literal() -> str:
+    """A flaggable literal built from the module's own list, never written
+    here - same rule as the rest of this file."""
+    return "1,240 " + sorted(fs._DOMAIN_UNITS)[0]
+
+
+#: Pinned deliberately, NOT derived from `fs.SURFACE_DIRS`. The first draft
+#: of the test below parametrised over that tuple, so deleting `examples`
+#: from it deleted the case that would have complained - 205 tests became
+#: 204 and stayed green. A guard whose fixtures come from the thing it
+#: guards cannot see a deletion (2.2, and 3.6 on the gate's own config).
+REQUIRED_SURFACE_DIRS = ("python/sutradhar_guards", "python/tests",
+                         "examples", "js", "plugin", "docs")
+REQUIRED_SURFACE_FILES = ("README.md", "DOCTRINE.md", "SECURITY.md",
+                          "python/README.md")
+
+
+def test_the_surface_still_declares_every_directory_that_must_be_scanned():
+    """`examples/` is the one that matters most: round 18's leak lived there,
+    and an adopter's copy of the demo is the first thing they read."""
+    missing = [d for d in REQUIRED_SURFACE_DIRS if d not in fs.SURFACE_DIRS]
+    assert not missing, (
+        "these directories were dropped from the framework surface, so the "
+        "gate no longer looks at them: %s" % missing)
+
+
+def test_the_surface_still_declares_every_file_that_must_be_scanned():
+    missing = [f for f in REQUIRED_SURFACE_FILES if f not in fs.SURFACE_FILES]
+    assert not missing, "dropped from the surface: %s" % missing
+
+
+@pytest.mark.parametrize("subdir", fs.SURFACE_DIRS)
+def test_every_declared_surface_directory_is_actually_scanned(tmp_path, subdir):
+    """Each entry in `SURFACE_DIRS` must reach the scanner.
+
+    Found by mutation, not by review: dropping `examples` from the tuple left
+    all 749 tests green while the gate went blind to the exact material it
+    was built for - the leak of round 18 lived in `examples/`. Every other
+    test asserted on `docs/`, so the list was a declaration nothing read.
+    A declared surface no test walks is 3.6 in the gate's own configuration:
+    presence is not reachability.
+    """
+    d = tmp_path / subdir
+    d.mkdir(parents=True)
+    (d / "f.md").write_text("a line with " + _a_domain_literal() + "\n")
+    found, files = fs.scan_surface(tmp_path)
+    assert found, f"SURFACE_DIRS declares {subdir!r} but nothing under it was read"
+    assert any(subdir in f.path for f in found)
+
+
+@pytest.mark.parametrize("name", fs.SURFACE_FILES)
+def test_every_declared_surface_file_is_actually_scanned(tmp_path, name):
+    p = tmp_path / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("a line with " + _a_domain_literal() + "\n")
+    found, _ = fs.scan_surface(tmp_path)
+    assert found, f"SURFACE_FILES declares {name!r} but it was not read"
