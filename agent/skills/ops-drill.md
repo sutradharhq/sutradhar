@@ -103,6 +103,36 @@ LAYER            GATE (command)                    BUDGET   ACTUAL   VERDICT
 Ground rule 3 applies to every line of it: never pipe a gate through
 anything that swallows `$?`, and never read the tail of a log as a verdict.
 
+## A lockfile's only claim is "a second machine gets this tree"
+
+The cold-start drill's other half, and it is worth stating separately
+because a lockfile invites the wrong discipline. It is not numeric truth to
+be frozen and re-baselined (2.5); it makes exactly one claim - *a second
+machine resolves the same tree* - and the only thing that tests that claim
+is installing on a second machine.
+
+*Scar: a lockfile resolved only on the machine that generated it, because
+the platform-specific optional dependencies had been pruned out of it.
+Every install on that machine was green, for as long as there was only one
+machine. It is the sibling of "tested only in the layout it was built in",
+which is the same shape that ships a template nobody can run.*
+
+So the cold-start gate is not "the install command exited 0". It is all of:
+
+- **a machine that is not the one the lock was written on.** A colleague's,
+  a fresh container, CI - anything that did not generate it.
+- **a different OS or architecture,** if more than one exists anywhere in
+  your fleet, including a developer laptop that differs from production.
+  Optional dependencies are exactly where this defect hides.
+- **an empty dependency cache.** A warm store resolves what the lock cannot,
+  and hides it. Prove the resolver read the lock rather than the cache.
+- **the resolved set DIFFED against the generating machine's,** not
+  eyeballed. Counts and versions, compared by a command with an exit code
+  (ground rule 3), the same way a restore is reconciled rather than admired.
+
+A lock nobody has installed from twice is in the same state as a backup
+nobody has restored: it is a file that looks like an assurance.
+
 ## Ground rules
 
 1. **Written artifacts only.** The drill follows the doc under test
