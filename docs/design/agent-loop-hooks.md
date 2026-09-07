@@ -92,6 +92,8 @@ When it is a commit, it runs the fast guards over the repo:
 |---|---|---|
 | `interpolation_lint` | any `.py` file is staged | the staged `.py` paths only |
 | `swallow_lint` | a `swallow_baseline.json` exists | the whole tree, against that baseline |
+| `framework_shape` | a `framework_shape_baseline.json` exists | `--diff HEAD`: the lines entering this commit |
+| `ownership_lint` | a `.sutradhar-owners` manifest exists AND `$SUTRADHAR_OWNER` is set | the staged paths only |
 | `rounds --check` | `docs/rounds/` exists | that directory |
 
 Red → **deny**, with the guard's own stdout/stderr as

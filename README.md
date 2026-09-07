@@ -111,6 +111,7 @@ Stated tool by tool, so you can tell before you clone:
 | `ratchet.py`, `claim_check.py`, `golden.py`, `envgate.py` | **Python test suites** | Libraries you import into your own tests. The patterns port; the code is Python. |
 | `swallow_lint.py`, `interpolation_lint.py`, `detectors.py`, `conflated_degrade_lint.py` | **Python source only** | These four parse a Python AST. The ratchet *pattern* ports to any language in an afternoon; the shipped detectors do not. |
 | `ci_step_lint.py` | **Any stack using GitHub Actions** | It reads workflow YAML with no parser and resolves the script paths a step names; the scripts can be in any language, and only the `.py` ones are checked today. |
+| `ownership_lint.py` | **Any git repository**, any language | It reads a manifest of owners and globs and the paths in your index, and never opens a source file. Only useful when more than one agent or session works one tree. |
 | `framework_shape.py` | **Any repo that ships a framework**, any language | It reads text, not source: a numeric literal followed by a domain unit, and currency, anywhere in the surface you declare. Only useful if what you ship is a framework - a product is *supposed* to speak its own domain. |
 | DOCTRINE.md, `agent/`, `docs/`, `ci/` | **Any stack** | Rules, playbooks, agent packs, CI shape. |
 
@@ -157,6 +158,7 @@ sutradhar/
 │   │   ├── obsgate.py             Observability floor as a provenance gate (6.6)
 │   │   ├── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
 │   │   ├── framework_shape.py     ...and keeps it speaking its own vocabulary, not an adopter's
+│   │   ├── ownership_lint.py      Refuses a stage that touches a path another agent owns (7.3)
 │   │   └── mcp_server.py          Optional MCP stdio server: the guards as agent-callable tools
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
 ├── js/

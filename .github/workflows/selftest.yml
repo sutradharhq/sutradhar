@@ -40,6 +40,7 @@ jobs:
           python python/sutradhar_guards/obsgate.py --selfcheck
           python python/sutradhar_guards/framework_only.py --selfcheck
           python python/sutradhar_guards/framework_shape.py --selfcheck
+          python python/sutradhar_guards/ownership_lint.py --selfcheck
       - name: This repo is still a framework, not a product
         # The guards import stdlib only and no dependency manifest has
         # appeared outside examples/. The first one to break this turns the
@@ -104,6 +105,7 @@ jobs:
           python3.9 python/sutradhar_guards/obsgate.py --selfcheck
           python3.9 python/sutradhar_guards/framework_only.py --selfcheck
           python3.9 python/sutradhar_guards/framework_shape.py --selfcheck
+          python3.9 python/sutradhar_guards/ownership_lint.py --selfcheck
 
   examples:
     name: The worked example still catches its planted defects
@@ -160,6 +162,7 @@ jobs:
           test -f /tmp/target/scripts/conflated_degrade_lint.py
           test -f /tmp/target/scripts/ci_step_lint.py
           test -f /tmp/target/scripts/framework_shape.py
+          test -f /tmp/target/scripts/ownership_lint.py
           test -f /tmp/target/cypress/support/uiGuards.ts
           test -f /tmp/target/probe/server.mjs
           test -f /tmp/target/scripts/verify_guard.py
@@ -172,3 +175,4 @@ jobs:
           python3 /tmp/target/scripts/budget.py --selfcheck
           python3 /tmp/target/scripts/rounds.py --selfcheck
           python3 /tmp/target/scripts/framework_shape.py --selfcheck
+          python3 /tmp/target/scripts/ownership_lint.py --selfcheck

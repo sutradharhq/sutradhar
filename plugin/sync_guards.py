@@ -50,6 +50,7 @@ BUNDLED = (
     "interpolation_lint.py",
     "mcp_server.py",
     "obsgate.py",
+    "ownership_lint.py",
     "rounds.py",
     "swallow_lint.py",
     "verify_guard.py",

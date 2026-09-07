@@ -66,6 +66,19 @@ jobs:
       # - name: The framework does not speak the adopter's domain
       #   run: python scripts/framework_shape.py . --diff origin/main
 
+      # NOT A CI STEP, and the comment is the finding rather than a
+      # placeholder. `ownership_lint.py` refuses a STAGE that reaches into a
+      # path another agent owns (7.3). In CI there is no stage: the index is
+      # empty on a checkout, so the guard would read zero paths, refuse
+      # nothing, and print a green line on every push forever - a check that
+      # cannot fail, which is 3.7 built on purpose. Its home is the moment
+      # before the commit, in whatever runs your parallel agents:
+      #
+      #     python scripts/ownership_lint.py --owner <your-agent-name>
+      #
+      # With no manifest it exits 0 and says it measured nothing, so wiring
+      # it costs a repository with one agent exactly nothing.
+
       # Doctrine 1.1: every number declared in a design note must have a
       # test behind it. A budget nobody enforces reads as a commitment
       # and behaves like a wish.

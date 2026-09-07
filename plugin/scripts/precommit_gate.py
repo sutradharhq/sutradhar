@@ -55,8 +55,8 @@ except Exception as exc:  # pragma: no cover - exercised by the import mutant
 SHELL_TOOLS = ("Bash", "PowerShell")
 
 # Exit-code partitions, quoted from docs/design/mcp-server.md. Exit 2 is a
-# USAGE error for these three guards, which makes it an instrument failure
-# and not a finding.
+# USAGE error for every guard planned below, which makes it an instrument
+# failure and not a finding.
 LINT_CODES = {0: H.GREEN, 1: H.RED}
 
 
@@ -114,6 +114,25 @@ def _plan(root: Path, staged: list[str]) -> list[tuple[str, list[str] | None, st
         if shape and Path(shape).is_file() else None,
         "no framework_shape_baseline.json - nothing here declares a "
         "framework surface to hold to its own vocabulary",
+    ))
+
+    # 7.3, register B-16: a stage that reaches into a path another agent
+    # declared it owns is refused HERE, at the commit, because that is the
+    # last moment the collision is still cheap. Both halves have to be
+    # present - a manifest and an owner - since a gate that guessed which
+    # agent it was would refuse the wrong half of the tree, and a guessed
+    # verdict is worse than an absent one.
+    owner = os.environ.get("SUTRADHAR_OWNER", "").strip()
+    owners_env = os.environ.get("SUTRADHAR_OWNERS_MANIFEST")
+    owners = Path(owners_env) if owners_env else next(
+        (c for c in (root / ".sutradhar-owners",) if c.is_file()), None)
+    out.append((
+        "ownership_lint",
+        [py, str(gdir / "ownership_lint.py"), "--owner", owner,
+         "--repo", str(root), "--manifest", str(owners), *staged]
+        if owner and owners and Path(owners).is_file() and staged else None,
+        "no .sutradhar-owners manifest with $SUTRADHAR_OWNER set - nothing "
+        "here declares who owns which path",
     ))
 
     rounds_dir = root / "docs" / "rounds"

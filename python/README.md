@@ -11,6 +11,7 @@ docstring.
 | `ratchet.py` | Your own class invariants, whatever they walk | Shrink-only allowlist library with the guard-the-guard stale check |
 | `envgate.py` | Env-gated test tiers actually run somewhere | Marker auto-skip + an audit that fails when no CI file sets the gate |
 | `framework_shape.py` | A framework surface does not start speaking an adopter's business domain | Domain-unit and currency detector over the shipped surface, baselined with a written reason per entry; `--diff` gates added lines; `--against <corpus>` reports corpus-central terms |
+| `ownership_lint.py` | No agent stages a path another agent declared it owns | A `<owner>: <glob> ...` manifest against the index (or named paths); a foreign path is refused, an unowned one is allowed and counted, and a missing manifest is an absent instrument that says so |
 
 ## Install
 
