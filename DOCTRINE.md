@@ -147,7 +147,10 @@ one dependency blip made a fleet-wide verdict read clean.*
 
 **2.8 String interpolation into a query language is a hole even when the
 current value is safe.** The pattern becomes the vulnerability the moment
-someone parameterises it. Enforced mechanically by `interpolation_lint.py`.
+someone parameterises it. Enforced mechanically by `interpolation_lint.py`,
+which reads `%`-formatting and `str.format()` into a query string as the same
+hole in an older spelling and not only f-strings (B-20, `practice`: it
+strengthens this rule's mechanism and founds nothing).
 
 **2.9 A check that could not run has not passed.** "Did not fail" and
 "could not measure" are different answers and must be different values.

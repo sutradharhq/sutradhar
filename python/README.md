@@ -7,7 +7,7 @@ docstring.
 | Module | What it enforces | Mechanic |
 |---|---|---|
 | `swallow_lint.py` | No new silent exception swallows | AST detector + per-file count baseline that only shrinks |
-| `interpolation_lint.py` | No f-string interpolation into query strings without escaping at the site | AST detector over JoinedStr, keyword presets for SQL/SPARQL/Cypher |
+| `interpolation_lint.py` | No interpolation into query strings without escaping at the site, in any of the three spellings | AST detector over f-strings, `%`-formatting and `str.format()`; keyword presets for SQL/SPARQL/Cypher |
 | `ratchet.py` | Your own class invariants, whatever they walk | Shrink-only allowlist library with the guard-the-guard stale check |
 | `envgate.py` | Env-gated test tiers actually run somewhere | Marker auto-skip + an audit that fails when no CI file sets the gate |
 | `framework_shape.py` | A framework surface does not start speaking an adopter's business domain | Domain-unit and currency detector over the shipped surface, baselined with a written reason per entry; `--diff` gates added lines; `--against <corpus>` reports corpus-central terms |
