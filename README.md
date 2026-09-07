@@ -97,7 +97,8 @@ Stated tool by tool, so you can tell before you clone:
 | `js/probe/` | **Any browser app** | Plain ESM, zero dependencies, bundler-agnostic; the agent side is `curl`. |
 | `js/cypress/uiGuards.ts` | **TypeScript + Cypress** | Shipped for Cypress. The guards are small and DOM-level, so the Playwright port is mostly mechanical. |
 | `ratchet.py`, `claim_check.py`, `golden.py`, `envgate.py` | **Python test suites** | Libraries you import into your own tests. The patterns port; the code is Python. |
-| `swallow_lint.py`, `interpolation_lint.py`, `detectors.py` | **Python source only** | These three parse a Python AST. The ratchet *pattern* ports to any language in an afternoon; the shipped detectors do not. |
+| `swallow_lint.py`, `interpolation_lint.py`, `detectors.py`, `conflated_degrade_lint.py` | **Python source only** | These four parse a Python AST. The ratchet *pattern* ports to any language in an afternoon; the shipped detectors do not. |
+| `ci_step_lint.py` | **Any stack using GitHub Actions** | It reads workflow YAML with no parser and resolves the script paths a step names; the scripts can be in any language, and only the `.py` ones are checked today. |
 | DOCTRINE.md, `agent/`, `docs/`, `ci/` | **Any stack** | Rules, playbooks, agent packs, CI shape. |
 
 So: the governance, provenance, and observability half of the harness works
@@ -133,6 +134,8 @@ sutradhar/
 │   │   ├── swallow_lint.py        AST-based silent-exception-swallow ratchet
 │   │   ├── interpolation_lint.py  Query-string injection guard (SQL, SPARQL, any DSL)
 │   │   ├── dead_route_lint.py     Tests that cannot fail: weak assertions, dead API routes
+│   │   ├── conflated_degrade_lint.py  A failed read that reads as an empty one (the quiet half of 2.7)
+│   │   ├── ci_step_lint.py        Every CI step can reach the script it names (6.7)
 │   │   ├── ratchet.py             Library for writing shrink-only class-invariant tests
 │   │   ├── envgate.py             Pytest env-gating that audits its own skip gates
 │   │   ├── claim_check.py         Ground every number in LLM-generated text

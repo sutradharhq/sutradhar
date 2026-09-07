@@ -326,15 +326,43 @@ def test_plain_strings_still_work(tmp_path):
 
 # ── the documented wiring must not teach the defect back ────────────────────
 
-def test_no_shipped_doc_wires_a_line_number_into_a_ratchet():
+# Snippets an adopter would copy. A round record has to be able to QUOTE the
+# defect it is recording, so history is scanned and only code is judged.
+_TAUGHT_KEYS = ('f"{f}:{hit}"', 'f"{py}:{node.lineno}"', 'f"{spec.name}:{i}"')
+
+
+def _fenced_code(text: str) -> str:
+    """The fenced code blocks of a markdown document, concatenated."""
+    blocks, inside = [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            inside = not inside
+            continue
+        if inside:
+            blocks.append(line)
+    return "\n".join(blocks)
+
+
+def test_no_shipped_doc_teaches_a_line_number_as_a_ratchet_key():
     """R18-1 reached adopters through the docs, not only through the code:
-    both playbooks showed `f"{f}:{hit}"` going into `assert_only_shrinks`."""
+    `docs/backend.md` showed `f"{f}:{hit}"` going into `assert_only_shrinks`,
+    which is the shape an adopter copies.
+
+    Only CODE is judged, and round records are exempt: a document recording
+    the defect must be able to name it, and a gate that refuses that teaches
+    people to describe incidents vaguely."""
     root = Path(__file__).resolve().parents[2]
+    docs = [
+        d for d in sorted((root / "docs").rglob("*.md"))
+        if "rounds" not in d.relative_to(root).parts
+    ] + [root / "README.md"]
+    assert len(docs) >= 5, "scanned almost nothing - this would pass vacuously"
     offenders = []
-    for doc in sorted((root / "docs").rglob("*.md")) + [root / "README.md"]:
-        text = doc.read_text(encoding="utf-8", errors="replace")
-        if 'f"{f}:{hit}"' in text or 'f"{py}:{node.lineno}"' in text:
+    for doc in docs:
+        code = _fenced_code(doc.read_text(encoding="utf-8", errors="replace"))
+        if any(snippet in code for snippet in _TAUGHT_KEYS):
             offenders.append(str(doc.relative_to(root)))
     assert not offenders, (
-        f"these documents compose a file:line ratchet key: {offenders}"
+        f"these documents show a file:line ratchet key in code an adopter "
+        f"would copy: {offenders}"
     )

@@ -5,6 +5,7 @@ fails". Each lint CLI runs its embedded selfcheck before scanning; these
 tests blind the detector and assert the CLI exits nonzero - so the path
 from "detector went vacuous" to "CI goes red" is itself under test.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -128,3 +129,57 @@ def test_no_export_shadows_a_submodule():
                 f"{type(exported).__name__} {exported!r}, not the submodule"
             )
     assert not shadowed, "\n".join(shadowed)
+
+
+# ── class ratchet: the oldest-Python list may not lag the current one ───────
+
+def _selfcheck_lists() -> tuple:
+    """(guards the 3.x CI step runs, guards the 3.9 step runs).
+
+    Derived from the workflow's own text rather than from a list kept here,
+    so a guard added to CI is covered the day it lands (doctrine 2.1).
+    """
+    import re
+    root = Path(__file__).resolve().parents[2]
+    ci = (root / ".github" / "workflows" / "selftest.yml").read_text()
+    modern, old = set(), set()
+    for line in ci.splitlines():
+        m = re.search(r"(python3?(?:\.9)?) python/sutradhar_guards/"
+                      r"(\w+)\.py --selfcheck", line)
+        if m:
+            (old if m.group(1) == "python3.9" else modern).add(m.group(2))
+    return modern, old
+
+
+def test_ci_runs_selfchecks_at_all():
+    """Guards the guard: two empty sets would satisfy the comparison below
+    and report a green invariant nothing exercised (3.6)."""
+    modern, old = _selfcheck_lists()
+    assert len(modern) >= 5 and len(old) >= 5, (modern, old)
+
+
+def test_the_oldest_python_list_covers_the_current_one():
+    """The drift that actually happens: a guard is added to the 3.x list and
+    not to the 3.9 one, so the oldest supported interpreter silently stops
+    exercising it and a 3.9-only break ships green."""
+    modern, old = _selfcheck_lists()
+    missing = sorted(modern - old)
+    assert not missing, (
+        f"{missing} run their selfcheck on the current Python and not on 3.9; "
+        f"the oldest supported interpreter has quietly stopped checking them"
+    )
+
+
+def test_every_guard_bootstrap_puts_in_scripts_is_exercised_somewhere():
+    """A guard an adopter is handed and CI never runs is a guard nobody has
+    seen work in this repository."""
+    root = Path(__file__).resolve().parents[2]
+    bootstrap = (root / "bootstrap.sh").read_text()
+    ci = (root / ".github" / "workflows" / "selftest.yml").read_text()
+    copied = set(re.findall(r'"\$TARGET/scripts/(\w+)\.py"', bootstrap))
+    assert copied, "bootstrap copies no guard into scripts/ - vacuous"
+    unexercised = sorted(n for n in copied if f"sutradhar_guards/{n}.py" not in ci)
+    assert not unexercised, (
+        f"bootstrap hands adopters {unexercised}, and this repo's CI never "
+        f"runs them"
+    )

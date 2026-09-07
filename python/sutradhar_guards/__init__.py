@@ -15,6 +15,8 @@ earned it and the usage pattern.
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
   obsgate              observability floor as a provenance gate (doctrine 6.6)
   dead_route_lint      tests that cannot fail: weak assertions + dead routes
+  conflated_degrade_lint  a failed read that reads as an empty one (2.7's quiet half)
+  ci_step_lint         every CI step can reach the script it names (6.7)
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar

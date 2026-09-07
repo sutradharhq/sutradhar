@@ -35,6 +35,8 @@ jobs:
           python python/sutradhar_guards/swallow_lint.py --selfcheck
           python python/sutradhar_guards/interpolation_lint.py --selfcheck
           python python/sutradhar_guards/dead_route_lint.py --selfcheck
+          python python/sutradhar_guards/conflated_degrade_lint.py --selfcheck
+          python python/sutradhar_guards/ci_step_lint.py --selfcheck
           python python/sutradhar_guards/obsgate.py --selfcheck
           python python/sutradhar_guards/framework_only.py --selfcheck
       - name: This repo is still a framework, not a product
@@ -42,6 +44,13 @@ jobs:
         # appeared outside examples/. The first one to break this turns the
         # framework into a product, which must be a deliberate diff.
         run: python python/sutradhar_guards/framework_only.py .
+      - name: Every step in this workflow can reach the script it names
+        # R18-3, 6.7 applied to CI wiring: a step whose interpreter exits 2 on
+        # file-not-found has made a claim about a process and none about the
+        # code, and it takes every later step in the job with it - so its red
+        # reads as "the guard is failing" when it means "the guard is absent".
+        # This step is the one that would catch a rename of any guard above.
+        run: python python/sutradhar_guards/ci_step_lint.py .github/workflows
       - name: budget gate (this repo's own declared envelopes)
         # Two things at once: the gate's selfcheck (a planted
         # unenforced budget must be caught) and the real check that
@@ -76,6 +85,8 @@ jobs:
           python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
           python3.9 python/sutradhar_guards/interpolation_lint.py --selfcheck
           python3.9 python/sutradhar_guards/dead_route_lint.py --selfcheck
+          python3.9 python/sutradhar_guards/conflated_degrade_lint.py --selfcheck
+          python3.9 python/sutradhar_guards/ci_step_lint.py --selfcheck
           python3.9 python/sutradhar_guards/verify_guard.py --selfcheck
           python3.9 python/sutradhar_guards/budget.py --selfcheck
           python3.9 python/sutradhar_guards/rounds.py --selfcheck
@@ -134,12 +145,16 @@ jobs:
           mkdir /tmp/target
           bash bootstrap.sh /tmp/target
           test -f /tmp/target/scripts/swallow_lint.py
+          test -f /tmp/target/scripts/conflated_degrade_lint.py
+          test -f /tmp/target/scripts/ci_step_lint.py
           test -f /tmp/target/cypress/support/uiGuards.ts
           test -f /tmp/target/probe/server.mjs
           test -f /tmp/target/scripts/verify_guard.py
           test -f /tmp/target/scripts/budget.py
           test -f /tmp/target/scripts/rounds.py
           python3 /tmp/target/scripts/swallow_lint.py --selfcheck
+          python3 /tmp/target/scripts/conflated_degrade_lint.py --selfcheck
+          python3 /tmp/target/scripts/ci_step_lint.py --selfcheck
           python3 /tmp/target/scripts/verify_guard.py --selfcheck
           python3 /tmp/target/scripts/budget.py --selfcheck
           python3 /tmp/target/scripts/rounds.py --selfcheck

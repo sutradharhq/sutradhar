@@ -40,6 +40,19 @@ jobs:
       - name: Query-interpolation guard
         run: python scripts/interpolation_lint.py src/ --keywords sql
 
+      # The quiet half of honest degradation, which the swallow lint
+      # structurally cannot see: the handler logs, and still returns the
+      # value a legitimate empty result returns. Ratchet, so a codebase with
+      # existing conflations can adopt it on day one.
+      - name: A failed read is distinguishable from an empty one
+        run: python scripts/conflated_degrade_lint.py src/ --baseline scripts/conflated_degrade_baseline.json
+
+      # Doctrine 6.7 applied to this file. A step whose interpreter exits 2
+      # on file-not-found says nothing about your code and takes every later
+      # step in the job with it, and that red reads as a finding for weeks.
+      - name: Every step above can reach the script it names
+        run: python scripts/ci_step_lint.py .
+
       # Doctrine 1.1: every number declared in a design note must have a
       # test behind it. A budget nobody enforces reads as a commitment
       # and behaves like a wish.

@@ -41,7 +41,9 @@ that: `practice` + `new` is refused. This is the discipline that stops a survey
 of well-run repos from inflating the doctrine with things nobody has paid for.
 
 `Thread-K` is an eleventh thread, younger than the ten surveyed in round 7 and
-not present in that record's table.
+not present in that record's table. `Thread-L`, added in round 18, is a
+twelfth: an adopter thread whose report brought B-22 to B-24, likewise absent
+from round 7's table.
 
 **Round 14 is the register's first round.** Three items were decided in it -
 the two adopter-reported defects and the rule four threads had each invented
@@ -55,6 +57,15 @@ than moving thirteen deadlines to make it green. Moving them is exactly the
 behaviour R15-4 was filed to stop, and a register that clears itself by
 re-deferring is the mechanism failing while reporting success. Deciding the
 thirteen is round 17's first job.
+
+**Round 18 did not answer its four.** Recording round 18 makes B-13, B-16,
+B-20 and B-21 overdue, and round 18 was a guards round: it built neither the
+Playwright port nor the ownership manifest nor the `%`-format detector. The
+gate is RED again, deliberately, and the round record says so out loud rather
+than moving four deadlines to make it green - which is R15-4's exact shape.
+Round 18 added three items (B-22, B-23, B-24) and decided none, because an
+item recorded with a deadline is what this register is for and a row marked
+`adopted` over nothing built is the register lying.
 
 **Round 17 decided all thirteen, and the two that came due on recording it
 (B-4, B-6).** The rule given was: adopt unless the item is redundant with a
@@ -103,3 +114,6 @@ which is the difference this file is meant to make.
 | B-19 | — | this repo's public `DOCTRINE.md` lags the maintainer's standing doctrine, and the two have diverged in section 2 as well. Two independent agents cited a section 6 rule that does not exist here | scar | 8.1 | adopted | 17 | round 17: 6.7-6.11 appended from the standing doctrine, ids added and none renumbered, so all 89 findings still resolve. Section 2 is a superset here (2.7-2.9) and differs by one sentence in 2.2; nothing to sync |
 | B-20 | — | `interpolation_lint` sees f-string interpolation into a query-language string and not `%`-format: `"SELECT ... = '%s'" % name` is the same hole in an older spelling and passes clean | practice | 2.8 | owed | 18 | R16-5, and `practice` because nothing has been paid for it yet - it is a detector gap found by review, not an incident. 2.8 already carries its own justification, so this may only strengthen the mechanism. Round 18 rather than 17 because round 17 already owes the thirteen items that came due at 16, and a deadline nobody can meet is not a deadline |
 | B-21 | — | mutate what RUNS, not what you can see: a mutation applied to a declaration, a constant or a non-executing string reports "no change", which reads as "the guard is decoration" and means "the mutation never ran" | practice | 2.2 | owed | 18 | R16-6, third occurrence across rounds 13-15. `practice`: the cost is wasted review time and one nearly-wrong verdict, not a recorded incident, so it cannot found a rule - 2.2 already says revert the fix and watch it go red. What it can strengthen is the mechanism: the mutation step in `agent/skills/robustness-loop.md` should require naming the line that executes before editing it, and the round record should carry the command that showed the mutant red |
+| B-22 | Thread-L | an operating drill that boots the stack in dependency order and asserts what an OPERATOR would see at each layer, rather than what a health endpoint returns | scar | 6.1 | owed | 19 | 6.1 states the discipline and this repository ships nothing that runs one: `agent/skills/ops-drill.md` is a playbook a person follows, not a command with a gate. The thread's five costliest defects in a month were all operating defects no test could see by reading - the class 6.1 names and the reason it is rule one of section 6. What is owed is a mechanism, not a sentence |
+| B-23 | Thread-L | a lockfile that resolves only on the machine that generated it, because platform-specific optional dependencies were pruned out of it | scar | 6.1 | owed | 20 | 6.1 rather than 2.5, and the choice is the finding: a lockfile is not numeric truth to be frozen and re-baselined, it is an artifact whose only claim is "a second machine gets this tree", and the single thing that tests that claim is installing on a second machine. That is 6.1's cold-start drill, and the sibling of R16-1 - tested only in the layout it was built in. Belongs with the JS kit, which is why round 20 and not 19: this repository has no lockfile of its own to guard (`framework_only.py` refuses one), so the mechanism lands where the JS half does |
+| B-24 | Thread-L | a generator that exits 0 while writing a document with no entries in it | scar | 6.6 | owed | 19 | a second independent instance of the class this repository adopted in round 17 as 6.6's rows-per-run sentence (B-4, a training loop at zero rows for thirty days under green status). Convergence evidence for a rule already in the file, NOT a new rule and not a re-adoption: what is owed is whether the mechanism half - a job's success carrying its output count as a first-class check - is worth building now that two threads have paid for it separately |

@@ -27,6 +27,37 @@ R18-1; record: [docs/rounds/round-018.md](docs/rounds/round-018.md)).
   renamed entry from a new violation and banks both.
 - `find_order_by_without_limit` takes a second argument, `path`, so the key
   can name the file it came from. It defaults to `<src>`.
+- **`Ratchet.migrate_keys(mapping)` is new.** It rewrites a baseline one to
+  one and raises rather than write on anything it cannot place. Its refusals
+  are the point: it never banks an entry that was not already banked.
+- Both playbooks stopped teaching the defect: `docs/backend.md`'s worked
+  ratchet no longer composes `f"{f}:{hit}"`, and a test refuses that string in
+  any shipped document.
+
+**Two guards ported from an adopter thread** (round 18, R18-2 and R18-3).
+
+- **`conflated_degrade_lint.py` is new** - the quiet half of honest
+  degradation. `swallow_lint` catches an `except` that logs nothing; this
+  catches a handler that DOES log and returns the same falsy value some
+  legitimate "there is nothing here" path in the same function returns, so the
+  caller cannot tell an outage from an empty result. Ratchet with
+  `--update-baseline`, keys `path::qualified_name`, and output that says the
+  fix is to make the two distinguishable and not to raise.
+- **`ci_step_lint.py` is new** - doctrine 6.7 applied to CI wiring. For every
+  `run:` step it resolves the `*.py` paths named against that step's effective
+  working directory and requires the file to exist. A step that exits 2 on
+  file-not-found has said nothing about your code and has taken every later
+  step in the job with it. Stdlib only, no YAML parser; absolute paths are
+  skipped and counted out loud.
+- Both are copied by `bootstrap.sh` into `scripts/`, run in both CI selfcheck
+  lists, and wired into `ci/guards.yml`. This repository's own workflow is now
+  gated by `ci_step_lint` on every push.
+- **DOCTRINE.md 2.7 gains a sentence** naming the quiet half and
+  `conflated_degrade_lint.py`, with its scar. No rule was added or renumbered.
+- **The backflow register gains B-22, B-23 and B-24**, all `owed`. The gate is
+  red on B-13, B-16, B-20 and B-21, deliberately: round 18 did not build their
+  mechanisms and re-deferring four deadlines to go green is the behaviour
+  R15-4 was filed to stop.
 
 **Fifteen backflow items decided, five rules appended** (round 17; record:
 [docs/rounds/round-017.md](docs/rounds/round-017.md)).

@@ -136,6 +136,48 @@ A failure states itself. The concrete rules:
   code will happily compute on the lie. Our worst instance flipped a
   detector's verdict for an entire fleet, under a green status, cached for
   the full TTL.
+- **The handler that logs and still says nothing.** `swallow_lint` catches
+  the loud half - a handler with no log line. The quiet half is a handler
+  that logs and returns the SAME value some legitimate "there is nothing
+  here" path in the same function returns. The log exists, the caller still
+  cannot tell an outage from an empty result, and every number downstream is
+  computed over an unknown fraction of reality under a green status.
+  `conflated_degrade_lint.py` is the mechanical edge of that half:
+
+  ```bash
+  python scripts/conflated_degrade_lint.py src/ --update-baseline  # today's floor
+  python scripts/conflated_degrade_lint.py src/                    # gate; only shrinks
+  ```
+
+  **The fix is not "raise instead."** The fail-safe value is usually right -
+  that is why somebody chose it - and a guard that pushed every one of these
+  into a raise would be traded for one outage and then deleted. The silence
+  is the defect:
+
+  ```python
+  def read_state(keys):          # flagged: {} on failure, {} on empty
+      if not keys:
+          return {}
+      try:
+          return fetch(keys)
+      except Exception as exc:
+          log.warning("read failed: %s", exc)
+          return {}
+
+  def read_state(keys):          # clean: same values, one more bit
+      if not keys:
+          return {}, True
+      try:
+          return fetch(keys), True
+      except Exception as exc:
+          log.warning("read failed: %s", exc)
+          return {}, False
+  ```
+
+  Baselined entries are keyed `path::qualified_name`, never a position, so a
+  banked finding survives an edit above it. A conflation that is real and
+  intended - two paths that genuinely mean the same thing to every caller -
+  stays in the baseline with a comment at the site saying why.
 - A partial result carries a flag the caller must see:
   `(data, ok)` tuples, a `degraded_inputs` list on the response, a
   `status: "error"` with a stated reason. Pick one idiom per project.

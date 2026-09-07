@@ -110,7 +110,18 @@ degrades explicitly, or re-raises. Returning an empty value from a bare
 handler converts an outage into a lie. Enforced mechanically by
 `swallow_lint.py`. *Scar: a fleet-wide read failure was swallowed into `{}`,
 which downstream code read as "an event-free fleet", flipping a fraud
-detector's verdict for every entity at once, under a green status.*
+detector's verdict for every entity at once, under a green status.* That is
+the loud half; the quiet half is a handler that logs and still returns the
+value a legitimate empty result returns, so the caller cannot tell the two
+apart - `conflated_degrade_lint.py` catches that, and the fix is to make them
+distinguishable, never to raise instead. *Scar: three instances in one private
+build thread, all found by hand and none by a guard. A read that hit a corrupt
+key returned the same "no baseline" value as a read that found nothing, so a
+partial corruption still reported success while the affected records silently
+dropped a boundary interval. An absent timestamp and an unreadable one both
+collapsed to an idle state, and idle raises no alert. A failed lookup
+fail-safed to `{}`, which is indistinguishable from "nothing to report", so
+one dependency blip made a fleet-wide verdict read clean.*
 
 **2.8 String interpolation into a query language is a hole even when the
 current value is safe.** The pattern becomes the vulnerability the moment
