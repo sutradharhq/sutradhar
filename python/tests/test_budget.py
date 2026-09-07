@@ -54,10 +54,10 @@ def test_thousands_separators_are_accepted():
 
 def test_declared_summary_reads_like_the_design_note():
     b = budget_from_frontmatter({
-        "sutradhar_budget": "sweep", "n": "200000", "n_unit": "meters",
+        "sutradhar_budget": "sweep", "n": "200000", "n_unit": "entities",
         "p95_ms": "800", "memory_mb": "512",
     })
-    assert b.declared() == ["n=200,000 meters", "p95<=800ms", "mem<=512MB"]
+    assert b.declared() == ["n=200,000 entities", "p95<=800ms", "mem<=512MB"]
 
 
 # ── parsing: what it must refuse ────────────────────────────────────────────

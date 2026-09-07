@@ -3,7 +3,7 @@
 The rule this enforces (doctrine 4.1): a model phrases, it never invents.
 Every number in LLM-generated output must be traceable to a computed,
 witnessed value - MECHANICALLY, not by prompt hope. The incident that
-earned it: a generated regulator-facing document carried figures the
+earned it: a generated document that left the building carried figures the
 grounding layer had never computed, and a later revision grounded a
 current-year claim against last year's value because nothing compared
 units or vintages.
@@ -14,7 +14,7 @@ Usage:
 
     witnessed = [
         {"value": 84.5, "unit": "%"},
-        {"value": 1_240_000, "unit": "kWh"},
+        {"value": 1_240_000, "unit": "units"},
         {"value": 350_000, "unit": "INR"},
     ]
     ungrounded = ground_claims(generated_markdown, witnessed, rel_tol=0.005)
@@ -24,7 +24,7 @@ Usage:
 Unit handling, stated honestly: a claim with a unit only grounds against a
 witnessed value with the SAME unit (after shorthand expansion: k/M/B,
 lakh/crore); a unit-less claim grounds against any value. Cross-unit
-conversion (kWh vs MWh) is deliberately out of scope here - add your
+conversion (units vs thousands of units) is out of scope here - add your
 domain's conversions before trusting cross-unit grounding, because
 magnitude-only comparison let "12.4 MW" ground against a witnessed 12.4%
 in the incident above.
@@ -126,8 +126,8 @@ def ground_claims(
 
 def selfcheck() -> bool:
     wit = [{"value": 84.5, "unit": "%"}]
-    bad = ground_claims("Losses improved to 84.5% and revenue rose ₹2.1Cr.", wit)
-    good = ground_claims("Losses improved to 84.5%.", wit)
+    bad = ground_claims("Coverage improved to 84.5% and revenue rose ₹2.1Cr.", wit)
+    good = ground_claims("Coverage improved to 84.5%.", wit)
     empty = ground_claims("Revenue was ₹5L.", [])
     ok = len(bad) == 1 and good == [] and len(empty) == 1
     if not ok:

@@ -19,20 +19,20 @@ def test_extracts_currency_shorthand():
 
 
 def test_extracts_percent_and_units():
-    nums = extract_numbers("losses fell to 12.4% on 1,240 kWh")
+    nums = extract_numbers("coverage fell to 12.4% on 1,240 units")
     assert {(n["value"], n["unit"]) for n in nums} == {
-        (12.4, "%"), (1240.0, "kWh"),
+        (12.4, "%"), (1240.0, "units"),
     }
 
 
 def test_grounded_claim_passes():
     wit = [{"value": 12.4, "unit": "%"}]
-    assert ground_claims("Losses fell to 12.4%.", wit) == []
+    assert ground_claims("Coverage fell to 12.4%.", wit) == []
 
 
 def test_invented_number_is_flagged():
     wit = [{"value": 12.4, "unit": "%"}]
-    bad = ground_claims("Losses fell to 12.4% saving ₹7.7Cr.", wit)
+    bad = ground_claims("Coverage fell to 12.4% saving ₹7.7Cr.", wit)
     assert len(bad) == 1 and bad[0]["unit"] == "INR"
 
 
@@ -48,9 +48,9 @@ def test_empty_witness_set_flags_everything():
 
 
 def test_tolerance_is_relative():
-    wit = [{"value": 1000.0, "unit": "kWh"}]
-    assert ground_claims("used 1,004 kWh", wit, rel_tol=0.005) == []
-    assert len(ground_claims("used 1,010 kWh", wit, rel_tol=0.005)) == 1
+    wit = [{"value": 1000.0, "unit": "units"}]
+    assert ground_claims("used 1,004 units", wit, rel_tol=0.005) == []
+    assert len(ground_claims("used 1,010 units", wit, rel_tol=0.005)) == 1
 
 
 def test_bare_years_are_not_claims():

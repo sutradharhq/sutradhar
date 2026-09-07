@@ -93,7 +93,7 @@ echo
 out=$("$PY" "$G/swallow_lint.py" "$APP/app" --baseline "$APP/.no-baseline.json" 2>&1); rc=$?
 if [ $rc -ne 0 ] && echo "$out" | grep -q "readings.py"; then
   caught "silent exception swallow - readings.py turns an outage into {}, which
-             downstream code reads as 'this meter reported nothing'"
+             downstream code reads as 'this device reported nothing'"
 else
   missed_it "swallow_lint did not flag readings.py"
 fi
@@ -126,13 +126,13 @@ out=$(cd "$ROOT" && "$PY" -c "
 import sys; sys.path.insert(0, 'python'); sys.path.insert(0, '$APP')
 from sutradhar_guards.claim_check import ground_claims
 from app.report import summarise
-text = summarise(usage_kwh=980, change_pct=12)
-bad = ground_claims(text, [{'value': 980, 'unit': 'kWh'}, {'value': 12, 'unit': '%'}])
+text = summarise(usage_units=980, change_pct=12)
+bad = ground_claims(text, [{'value': 980, 'unit': 'units'}, {'value': 12, 'unit': '%'}])
 print(', '.join(c['raw'] for c in bad))
 sys.exit(0 if bad else 1)"); rc=$?
 if [ $rc -eq 0 ]; then
   caught "invented numbers in model output - the summary says $out, and the
-             witnessed values were 980 kWh and 12%"
+             witnessed values were 980 units and 12%"
 else
   missed_it "claim_check grounded everything"
 fi
@@ -156,7 +156,7 @@ fi
 # 6. a budget declared and never enforced (doctrine 1.1)
 out=$("$PY" "$G/budget.py" "$APP/docs/design" --tests "$APP/tests" 2>&1); rc=$?
 if [ $rc -eq 1 ] && echo "$out" | grep -q "reading-sweep"; then
-  caught "a budget nobody enforces - the design note promises 200,000 meters
+  caught "a budget nobody enforces - the design note promises 200,000 devices
              inside 800ms, and no test holds it to that"
 else
   missed_it "the budget gate did not flag reading-sweep"

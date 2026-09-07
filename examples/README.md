@@ -1,6 +1,6 @@
 # The worked example
 
-A tiny meter-billing app with seven defects in it. Its test suite is green.
+A tiny usage-billing app with seven defects in it. Its test suite is green.
 
 ```bash
 bash examples/run-the-guards.sh
@@ -25,14 +25,14 @@ nothing until something has shown it can go red.**
 `app/readings.py`
 
 ```python
-def latest_readings(store, meter_id):
+def latest_readings(store, device_id):
     try:
-        return store.fetch(meter_id)
+        return store.fetch(device_id)
     except Exception:
         return {}
 ```
 
-The caller cannot distinguish "this meter genuinely reported nothing" from
+The caller cannot distinguish "this device genuinely reported nothing" from
 "we could not reach the store". Downstream, that difference is a bill.
 
 *The original: a fleet-wide read failure was swallowed into `{}`, which the
@@ -46,11 +46,11 @@ fail the build, so you can adopt it on a tree with hundreds of them.
 ### 2. An unbounded ORDER BY
 
 ```python
-HISTORY_QUERY = "SELECT ts, kwh FROM readings WHERE meter = ? ORDER BY ts DESC"
+HISTORY_QUERY = "SELECT ts, units FROM readings WHERE device = ? ORDER BY ts DESC"
 ```
 
 Sorting a table that grows with every reading, with no `LIMIT`. Perfect on
-the demo dataset; a memory bomb on a meter that has been reporting for a
+the demo dataset; a memory bomb on a device that has been reporting for a
 year.
 
 *The original: a sweep that was flawless at 50 entities OOM-crashed the
@@ -61,7 +61,7 @@ Caught by `detectors.find_order_by_without_limit` (doctrine 2.6).
 ### 3. SQL built by interpolation
 
 ```python
-return f"SELECT ts, kwh FROM readings WHERE meter = '{meter_id}'"
+return f"SELECT ts, units FROM readings WHERE device = '{device_id}'"
 ```
 
 Safe today, because the only caller passes an integer. The pattern becomes
@@ -73,8 +73,8 @@ fix it. The shape *is* the hole.
 
 ### 4. A model that invents numbers
 
-`app/report.py` returns "Your usage rose 47% this month to 1,240 kWh". The
-witnessed values were 980 kWh and 12%. Every figure in that sentence is
+`app/report.py` returns "Your usage rose 47% this month to 1,240 units". The
+witnessed values were 980 units and 12%. Every figure in that sentence is
 fabricated, and the prose is fluent enough that a careful reader signs off.
 
 Caught by `claim_check.py` (doctrine 4.1: the model phrases, it never
@@ -102,7 +102,7 @@ real CI run where you confirm the gated tier's tests appear in the count.
 
 ### 6. A budget declared and never enforced
 
-`docs/design/sweep.md` promises 200,000 meters inside 800ms and 512MB.
+`docs/design/sweep.md` promises 200,000 devices inside 800ms and 512MB.
 Nothing holds the code to it. The note reads like a commitment and behaves
 like a wish.
 

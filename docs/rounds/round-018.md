@@ -25,6 +25,7 @@ convergence at that width is the strongest evidence 8.1 accepts.
 | R18-2 | med | 2.7 | an adopter thread's guard, ported | fixed | `swallow_lint` catches the loud half of honest degradation, an `except` that logs nothing. The quiet half it structurally cannot see is a handler that DOES log and returns the same falsy value some legitimate "there is nothing here" path in the same function returns - the caller cannot tell an outage from an empty result, and every number downstream is computed over an unknown fraction of reality under a green status. Shipped as `conflated_degrade_lint.py`, a ratchet keyed `path::qualified_name`, whose output says in as many words that the fix is not "raise instead" |
 | R18-3 | med | 6.7 | an adopter thread's guard, ported | fixed | a CI step ran a guard by a path that did not resolve under that job's working directory. The interpreter exited 2 on file-not-found - a claim about a process, not about the code under test - and took every later step in the job with it, and its red was read for weeks as "the guard is failing" rather than "the guard is absent". Same class as R16-1, the plugin that worked in exactly one layout, and invisible from inside that layout by construction. Shipped as `ci_step_lint.py` and run over this repository's own workflow in CI |
 | R18-4 | low | 6.7 | thread survey, convergence | closed | the adopter thread states, in its own guard's prose and without having read this file, that an exit code is a claim about a PROCESS and not about a check, and that a crash is the absence of a verdict rather than a verdict. That is 6.7 and 6.11, invented separately. It founds nothing and changes no text; it is recorded because 8.1 accepts convergence at that width as its strongest evidence, and because two of the four threads that converged on 2.9 got there the same way. Registered as backflow B-22 to B-24 rather than as doctrine |
+| R18-5 | med | 8.1 | vocabulary diff against the private tree | fixed | the repository declares itself a framework and not a product and gates that claim, while its guards spoke the adopter thread's domain. `claim_check.py` cited a "regulator-facing document", witnessed kilowatt-hours beside rupees, and asserted on "Losses improved to 84.5%" in its own selfcheck; its tests did the same; the worked example was a meter-billing app; and rule 1.1's scar, genericized to "entities" in `DOCTRINE.md`, still read "200,000 meters" in `budget.py`, its bundled copy, `docs/backend.md`, the budget tests and the example. The half-finished scrub is what proves the intent. Found by building a term-frequency vocabulary of the private tree and testing this one against it, which a keyword blocklist written from memory had passed twice. Fixed by genericizing the domain nouns and keeping every mechanism: lakh/crore/rupee parsing stays, because Indian numbering is a real capability and not a leak, and so do SPARQL keywords, a public standard the lint advertises beside SQL and Cypher |
 
 ## R18-1: what a key is for
 
@@ -183,3 +184,22 @@ adopted with nothing built would be the register lying.
 `.github/workflows/selftest.yml`.
 
 465 tests before, 550 after.
+
+## R18-5: what a blocklist cannot see
+
+The privacy sweeps in earlier rounds used a list of forbidden words written
+from memory. That is a test of the author's recall, not of the tree. This
+round built the check the other way round: take every identifier and word in
+the private tree, rank by frequency there, and ask which of them appear here.
+`meter` came back at 3,688 occurrences there and 12 here, and `kwh` at 20,
+neither of which was on any list anyone had written.
+
+The rule is worth keeping: **to test for leakage, derive the vocabulary from
+the source you are protecting, not from what you remember about it.** The
+same method now says the tree is clean, and it says so on evidence rather
+than on the absence of a match.
+
+Two terms survived deliberately. `sparql` is a W3C standard the injection
+lint supports beside SQL and Cypher, and dropping it would remove a
+capability the README advertises. `poller` appears only in 6.8's own scar,
+which is this repository's bug and not anyone else's.

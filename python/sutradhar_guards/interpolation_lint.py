@@ -61,7 +61,7 @@ DEFAULT_SAFE_CALLS = {
 }
 
 _NUMERIC_SUFFIX_RE = re.compile(
-    r"_(?:seconds|count|kwh|percent|pct|ms|int|integer|float|num|id_int|days|hours|limit)$",
+    r"_(?:seconds|count|bytes|percent|pct|ms|int|integer|float|num|id_int|days|hours|limit)$",
     re.I,
 )
 

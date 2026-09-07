@@ -61,11 +61,11 @@ FAST_PATH_BUDGET_FACTOR = 3.0
 
 RED_SOURCE = (
     "def find(conn, tenant):\n"
-    "    return conn.execute(f\"SELECT * FROM meters WHERE tenant = '{tenant}'\")\n"
+    "    return conn.execute(f\"SELECT * FROM devices WHERE tenant = '{tenant}'\")\n"
 )
 CLEAN_SOURCE = (
     "def find(conn, tenant):\n"
-    "    return conn.execute('SELECT * FROM meters WHERE tenant = ?', (tenant,))\n"
+    "    return conn.execute('SELECT * FROM devices WHERE tenant = ?', (tenant,))\n"
 )
 
 

@@ -7,6 +7,17 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**The framework stopped speaking the product's domain** (round 18, R18-5).
+`claim_check.py`, its tests, the budget guard's docstring and the worked
+example carried an adopter thread's subject matter - a regulator-facing
+document, kilowatt-hours beside rupees, "Losses improved to 84.5%", a
+meter-billing example, and rule 1.1's scar still reading "200,000 meters"
+where the doctrine had genericized it to "entities". All of it is now
+neutral. Every mechanism is unchanged: lakh, crore and rupee parsing stay,
+and so do the SPARQL keywords. Adopters pinning `claim_check` fixtures or
+the example's identifiers will see renames.
+
+
 **BREAKING: a ratchet key may no longer contain a line number** (round 18,
 R18-1; record: [docs/rounds/round-018.md](docs/rounds/round-018.md)).
 

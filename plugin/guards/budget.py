@@ -6,7 +6,7 @@ as a markdown table nothing read.
 
 *Scar: an unbounded fleet sweep worked perfectly at demo scale (50 entities)
 and OOM-crashed the datastore at 200,000. The design-time sentence - "this
-must survive 200,000 meters" - would have cost nothing to write. Finding out
+must survive 200,000 entities" - would have cost nothing to write. Finding out
 instead cost a full scale pass and seventeen store crashes.*
 
 The gate here is deliberately NOT "did you write a design note". That is

@@ -212,7 +212,7 @@ Rules that survived contact with a 4,000x scale jump:
 ## Scale discipline starts at design time
 
 The cheapest rule in this framework is a sentence written before the code:
-*this must survive 200,000 meters, inside 800ms and 512MB.* The sentence
+*this must survive 200,000 entities, inside 800ms and 512MB.* The sentence
 costs nothing. Skipping it cost us a full scale pass and seventeen store
 crashes on a sweep that was flawless at demo scale.
 

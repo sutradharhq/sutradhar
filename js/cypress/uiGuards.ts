@@ -292,7 +292,7 @@ export function expectEffect(
  * structurally cannot do: a store can be correct and a fetch can be 200
  * while the pixels are wrong.
  *
- *   cy.get("[data-testid^=worklist-row]").each(($row) => {
+ *   cy.get("[data-testid^=result-row]").each(($row) => {
  *     expect(overprintsIn($row[0]), "overprints").to.deep.eq([]);
  *   });
  */
