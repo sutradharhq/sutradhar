@@ -161,7 +161,12 @@ jobs:
           test -f /tmp/target/scripts/swallow_lint.py
           test -f /tmp/target/scripts/conflated_degrade_lint.py
           test -f /tmp/target/scripts/ci_step_lint.py
-          test -f /tmp/target/scripts/framework_shape.py
+          # NOT copied, deliberately (R20-4): framework_shape and
+          # framework_only gate a promise only this repository makes, and
+          # in an adopter's tree they can only ever pass. Asserted as an
+          # absence so the omission is pinned rather than re-derived.
+          test ! -f /tmp/target/scripts/framework_shape.py
+          test ! -f /tmp/target/scripts/framework_only.py
           test -f /tmp/target/scripts/ownership_lint.py
           test -f /tmp/target/cypress/support/uiGuards.ts
           test -f /tmp/target/probe/server.mjs
@@ -174,5 +179,4 @@ jobs:
           python3 /tmp/target/scripts/verify_guard.py --selfcheck
           python3 /tmp/target/scripts/budget.py --selfcheck
           python3 /tmp/target/scripts/rounds.py --selfcheck
-          python3 /tmp/target/scripts/framework_shape.py --selfcheck
           python3 /tmp/target/scripts/ownership_lint.py --selfcheck
