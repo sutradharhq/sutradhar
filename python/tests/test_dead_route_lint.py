@@ -28,7 +28,7 @@ def _write(tmp_path, body=SPEC, name="a.cy.ts"):
 
 def test_flags_route_absent_from_the_api(tmp_path):
     d = find_dead_routes(_write(tmp_path), {"/real/route"})
-    assert d == ["a.cy.ts:/ghost/route"], d
+    assert [v.key for v in d] == ["a.cy.ts::/ghost/route"], d
 
 
 def test_served_route_is_clean(tmp_path):
@@ -37,7 +37,10 @@ def test_served_route_is_clean(tmp_path):
 
 
 def test_flags_the_unfailable_assertion(tmp_path):
-    assert find_unfailable_assertions(_write(tmp_path)) == ["a.cy.ts:5"]
+    found = find_unfailable_assertions(_write(tmp_path))
+    assert [v.key for v in found] == ["a.cy.ts::.to.not.eq(500)"]
+    # The line the reader needs is in the message, not in the banked key.
+    assert found[0].message.startswith("a.cy.ts:5:")
 
 
 def test_strong_assertion_is_clean(tmp_path):

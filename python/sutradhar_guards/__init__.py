@@ -67,6 +67,13 @@ _EXPORTS = {
     "find_unresolved_relative_imports": "detectors",
     "find_dead_routes": "dead_route_lint",
     "find_unfailable_assertions": "dead_route_lint",
+    # `Violation` is NOT exported: `detectors`, `dead_route_lint` and
+    # `ratchet` each define their own (copy-in modules land in different
+    # directories in an adopter's tree, so they may not import each other),
+    # and one package attribute with three owners is the shadowing class
+    # `test_no_export_shadows_a_submodule` exists to refuse. Import it from
+    # the module you are using: from sutradhar_guards.ratchet import Violation
+    #
     # obsgate's verdict constants are NOT exported: verify_guard already
     # owns the package-level INCONCLUSIVE, and two constants with one name
     # and different owners is the shadowing class again. Import verdicts

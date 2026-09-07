@@ -78,6 +78,15 @@ Any route source works - OpenAPI paths, a `rails routes` dump, an Express
 router walk. A real suite hid 28 dead-route references behind "not 500" for
 months. Ask of every check: *what would have to break for this to go red?*
 
+Both detectors return `Violation(key, message)` and the baseline stores the
+key: `a.cy.ts::/ghost/route`, `a.cy.ts::.to.not.eq(500)`, with `#2` for a
+repeat of the same text in one spec. **No line number goes into a key** -
+`find_unfailable_assertions` used to bank `a.cy.ts:5`, so adding an import at
+the top of a spec re-flagged every banked assertion in it, and the quick fix
+(`--update-baseline`) banks the real new ones too. The line is in the
+message. To move an existing baseline across that change, use
+`Ratchet.migrate_keys({old: new})`, which refuses any entry it cannot place.
+
 ## Instrumentation is source work
 
 - Give every new component stable testids AT BUILD TIME, one naming idiom

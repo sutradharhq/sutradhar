@@ -41,11 +41,43 @@ Usage:
         Ratchet("tests/baselines/dead_routes.json").assert_only_shrinks(
             find_dead_routes("e2e/", routes)
         )
+
+Both return `Violation(key, message)`. The KEY is the spec file plus the
+normalised matched text - `a.cy.ts::/ghost/route`, `a.cy.ts::.to.not.eq(500)`
+- with `#2`, `#3` in source order for a repeat of the same text in one file.
+A line number never enters a key: `find_unfailable_assertions` used to bank
+`a.cy.ts:1`, so adding an import at the top of a spec re-flagged every banked
+assertion in it as new. See `ratchet.py` for the contract and its scar.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
+
+
+class Violation(NamedTuple):
+    """(stable key, human-readable message).
+
+    Defined here rather than imported from `ratchet.py`: these files are
+    copy-in and land in different directories in an adopter's tree, so a
+    cross-module import would break for them and not for us. A ratchet banks
+    `.key` and prints `.message`; `str()` gives the key.
+    """
+
+    key: str
+    message: str = ""
+
+    def __str__(self) -> str:
+        return self.key
+
+
+def _numbered(key: str, seen: dict) -> str:
+    """`key`, then `key#2`, `key#3` for later repeats in source order, so a
+    second identical match never renames the first one's banked entry."""
+    n = seen.get(key, 0) + 1
+    seen[key] = n
+    return key if n == 1 else f"{key}#{n}"
 
 # `url: "/foo/bar"` / `url: `${BASE}/foo/bar`` / `fetch("/foo")`.
 # `(?<!\w)` is load-bearing: without it this also matches `drill_url:`, which
@@ -110,29 +142,46 @@ def find_dead_routes(
     spec_root: str | Path,
     routes: set[str],
     patterns: tuple[str, ...] = ("*.cy.ts", "*.cy.js", "*.spec.ts", "*.e2e.ts"),
-) -> list[str]:
-    """`spec:path` for every URL under test that the API does not serve."""
-    dead: set[str] = set()
+) -> list[Violation]:
+    """`spec::path` for every URL under test that the API does not serve.
+
+    One entry per distinct dead path per spec - the same absent route named
+    twice in a file is one thing to fix.
+    """
+    dead: dict = {}
     for spec in _spec_files(spec_root, patterns):
         text = spec.read_text(errors="replace")
         for regex in (_URL_RE, _FETCH_RE):
             for raw in regex.findall(text):
                 norm = _normalise(raw)
                 if norm and not route_matches(norm, routes):
-                    dead.add(f"{spec.name}:{norm}")
-    return sorted(dead)
+                    key = f"{spec.name}::{norm}"
+                    dead.setdefault(key, Violation(
+                        key,
+                        f"{spec.name}: {norm} is not in the API's route table",
+                    ))
+    return [dead[k] for k in sorted(dead)]
 
 
 def find_unfailable_assertions(
     spec_root: str | Path,
     patterns: tuple[str, ...] = ("*.cy.ts", "*.cy.js", "*.spec.ts", "*.e2e.ts"),
-) -> list[str]:
-    """`spec:line` for every assertion that only excludes ONE bad outcome."""
-    out: list[str] = []
+) -> list[Violation]:
+    """`spec::<matched text>` for every assertion that only excludes ONE bad
+    outcome. The line is in the message; banking it would re-flag every
+    assertion below an added import."""
+    out: list[Violation] = []
     for spec in _spec_files(spec_root, patterns):
+        seen: dict = {}
         for i, line in enumerate(spec.read_text(errors="replace").splitlines(), 1):
-            if _UNFAILABLE_RE.search(line):
-                out.append(f"{spec.name}:{i}")
+            m = _UNFAILABLE_RE.search(line)
+            if m:
+                matched = " ".join(m.group(0).split())
+                out.append(Violation(
+                    _numbered(f"{spec.name}::{matched}", seen),
+                    f"{spec.name}:{i}: {line.strip()[:100]} - passes on every "
+                    f"other wrong answer",
+                ))
     return out
 
 
@@ -153,10 +202,38 @@ def selfcheck() -> bool:
     if not ok:
         print("[dead-route-lint] SELFCHECK FAILED - detector is not discriminating")
         return False
+
+    # The keys must survive an edit above them, or a banked finding comes
+    # back as new and `--update-baseline` banks the real ones with it.
+    import tempfile
+
+    spec = "expect(res.status).to.not.eq(500);\nexpect(a).to.not.eq(500);\n"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "a.cy.ts").write_text(spec)
+        flat = find_unfailable_assertions(root)
+        (root / "a.cy.ts").write_text("// added\n" * 4 + spec)
+        shifted = find_unfailable_assertions(root)
+        if len(flat) != 2 or [v.key for v in flat] != [
+            "a.cy.ts::.to.not.eq(500)", "a.cy.ts::.to.not.eq(500)#2"
+        ]:
+            print(f"[dead-route-lint] SELFCHECK FAILED - keys are wrong: "
+                  f"{[v.key for v in flat]}")
+            return False
+        if flat[0].message == shifted[0].message:
+            print("[dead-route-lint] SELFCHECK FAILED - the fixture did not "
+                  "move; the line-shift case is vacuous")
+            return False
+        if [v.key for v in flat] != [v.key for v in shifted]:
+            print("[dead-route-lint] SELFCHECK FAILED - inserting lines above "
+                  "an assertion changed its banked key")
+            return False
+
     # A silent pass cannot be told apart from a check that never ran (6.7):
     # name the pairs that were exercised, so exit 0 means something.
     print("[dead-route-lint] selfcheck ok: live route matched, ghost route refused, "
-          "`not.eq(500)` caught, `eq(200)` passed, query string normalised")
+          "`not.eq(500)` caught, `eq(200)` passed, query string normalised, keys "
+          "unchanged by four lines inserted above them")
     return True
 
 

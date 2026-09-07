@@ -37,7 +37,8 @@ def test_missing_module_is_flagged(tmp_path):
     pkg = _mkpkg(tmp_path)
     (pkg / "main.py").write_text("from .nowhere import thing\n")
     v = find_unresolved_relative_imports(pkg)
-    assert len(v) == 1 and "unresolved relative import" in v[0]
+    assert len(v) == 1 and "unresolved relative import" in v[0].message
+    assert v[0].key.endswith("::from .nowhere import thing")
 
 
 def test_missing_name_in_real_module_is_flagged(tmp_path):
@@ -46,7 +47,8 @@ def test_missing_name_in_real_module_is_flagged(tmp_path):
     pkg = _mkpkg(tmp_path)
     (pkg / "main.py").write_text("from .util import helper, renamed_away\n")
     v = find_unresolved_relative_imports(pkg)
-    assert len(v) == 1 and "renamed_away" in v[0]
+    assert len(v) == 1 and "renamed_away" in v[0].message
+    assert v[0].key.endswith("::from .util import renamed_away")
 
 
 def test_submodule_import_from_package_is_clean(tmp_path):

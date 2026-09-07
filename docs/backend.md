@@ -74,23 +74,25 @@ pin guards one grave.
 # tests/test_ratchets.py
 import ast
 from pathlib import Path
-from sutradhar_guards.ratchet import Ratchet, selfcheck_detector
+from sutradhar_guards.ratchet import Ratchet, Violation, selfcheck_detector
 
 SRC = Path("src")
 
-def find_uncapped_fleet_queries(source: str) -> list[str]:
+def find_uncapped_fleet_queries(source: str, path: str) -> list[Violation]:
     """Detector: every query over a growing collection must carry a cap."""
     hits = []
     tree = ast.parse(source)
     # ... walk for the shape of the defect class ...
+    #   key:     path::<enclosing qualified name>  - an identity
+    #   message: f"{path}:{node.lineno}: ..."      - where to find it today
     return hits
 
-def all_violations() -> list[str]:
-    out = []
-    for f in SRC.rglob("*.py"):
-        for hit in find_uncapped_fleet_queries(f.read_text()):
-            out.append(f"{f}:{hit}")
-    return out
+def all_violations() -> list[Violation]:
+    return [
+        v
+        for f in SRC.rglob("*.py")
+        for v in find_uncapped_fleet_queries(f.read_text(), str(f))
+    ]
 
 def test_fleet_queries_are_capped():
     Ratchet("tests/baselines/uncapped_queries.json").assert_only_shrinks(
@@ -105,6 +107,24 @@ def test_the_detector_is_not_blind():
         "def f():\n    return db.query('SELECT * FROM readings')\n",
     )
 ```
+
+### The key is an identity, never a position
+
+The baseline stores `Violation.key`, and **a line number must not appear in
+it**. A key that moves with the code re-flags every banked finding the first
+time somebody adds an import above it, and the only quick way out of that
+noise is `--update-baseline`, which banks the genuinely new findings at the
+same time. Key a Python definition by its qualified name (`Cls.method`,
+`outer.inner`, with `#2`, `#3` for later same-named siblings in one file);
+key anything else by the file plus the normalised matched text. Put the line
+number in `message`, where the reader needs it and the baseline does not see
+it.
+
+When you change a detector's key scheme, move the baseline across with
+`Ratchet.migrate_keys({old: new})`, which rewrites one to one and refuses any
+entry it cannot place - so it can never bank something that was not banked
+before. `--update-baseline` cannot tell a renamed entry from a new violation
+and will do exactly that.
 
 ## Honest degradation
 

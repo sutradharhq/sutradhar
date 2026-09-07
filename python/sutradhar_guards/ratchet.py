@@ -40,6 +40,29 @@ To (re)record the baseline after fixing a violation:
 Baselines are sorted JSON lists (or dicts for count mode), reviewed in the
 PR like any other file. A baseline diff that grows should be as alarming to
 a reviewer as a deleted test.
+
+## The key must be a stable IDENTITY, not a position
+
+A baseline entry names a violation. It must name it in a way that survives
+an edit somewhere else in the file, because a key that moves re-flags a
+banked finding as new - and the obvious way out of that noise is
+`--update-baseline`, which banks every genuinely new finding along with it.
+So: **a line number must never appear in a key.** Use the qualified name of
+the enclosing `def` (`Cls.method`, `outer.inner`) for a Python definition,
+or the file plus the normalised matched text for anything else, and put the
+line number in the human-readable message where it belongs.
+
+*Scar, from a private build thread that shipped this ratchet: a baseline
+keyed on `path:line name` re-flagged banked findings three times in one day
+- a docstring edit above one function, a single added import, and a refactor
+that moved three functions it did not change. Each time the tempting fix was
+`--update-baseline`, which would have banked any real new finding along with
+the noise. The key became `path::qualified_name`.*
+
+When a detector's key scheme changes, migrate the baseline with
+`Ratchet.migrate_keys` - never with `--update-baseline`, which cannot tell a
+renamed entry from a new violation. `Violation(key, message)` is the shipped
+way to carry both halves: the ratchet banks `.key` and prints `.message`.
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
@@ -48,7 +71,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, NamedTuple
 
 
 class RatchetError(AssertionError):
@@ -56,26 +79,124 @@ class RatchetError(AssertionError):
     reads naturally in pytest output."""
 
 
+class Violation(NamedTuple):
+    """A finding whose banked IDENTITY and printed LOCATION are different
+    strings, deliberately.
+
+    `key` is what the baseline stores and must not contain a line number;
+    `message` is what a person reads and should. A ratchet reads `.key`
+    (and `str()` gives the same), so a detector can return these wherever
+    it used to return plain strings.
+    """
+
+    key: str
+    message: str = ""
+
+    def __str__(self) -> str:
+        return self.key
+
+
 class Ratchet:
     def __init__(self, baseline_path: str | Path, name: str = ""):
         self.path = Path(baseline_path)
         self.name = name or self.path.stem
 
-    # ── key mode: violations are identifiers (file:line, route names, ...) ──
+    # ── key mode: violations are stable identities ──────────────────────────
+    # A key names a violation - a qualified function name, a route name, a
+    # normalised matched string. NOT a position: see the module docstring.
 
     def assert_only_shrinks(
-        self, current: Iterable[str], update: bool | None = None
+        self, current: Iterable[object], update: bool | None = None
     ) -> None:
         """Fail on any violation not in the baseline, and on any baseline
-        entry that is no longer a violation (stale - must be removed)."""
-        cur = sorted(set(str(v) for v in current))
+        entry that is no longer a violation (stale - must be removed).
+
+        **The stable-key contract.** Each item is banked by its key: `.key`
+        when the item has one (a `Violation`), otherwise `str(item)`. A key
+        must identify the violation independently of where it sits in the
+        file, so **a line number must not appear in it** - an edit anywhere
+        above a banked finding would otherwise re-flag it as new, and the
+        only quick way out is `--update-baseline`, which banks every real
+        new finding at the same time. Put the line in the `message`.
+
+        Changing a detector's key scheme invalidates every existing
+        baseline. `migrate_keys` is the way across; re-recording is not.
+        """
+        detail: dict[str, str] = {}
+        keys: list[str] = []
+        for item in current:
+            key = getattr(item, "key", None)
+            key = key if isinstance(key, str) else str(item)
+            keys.append(key)
+            msg = getattr(item, "message", None)
+            if isinstance(msg, str) and msg and key not in detail:
+                detail[key] = msg
+        cur = sorted(set(keys))
         if self._updating(update):
             self._write(cur)
             return
         base = set(self._read_list())
-        new = [v for v in cur if v not in base]
+        new = [
+            v if v not in detail else f"{v}\n      {detail[v]}"
+            for v in cur if v not in base
+        ]
         stale = [v for v in sorted(base) if v not in cur]
         self._raise_if_needed(new, stale)
+
+    def migrate_keys(self, mapping: Mapping[str, str]) -> list[str]:
+        """Rewrite this baseline from old keys to new, one to one, refusing
+        anything it cannot place.
+
+        That refusal is the point. A key-scheme change makes every banked
+        entry look new, and `--update-baseline` would silently bank the real
+        new findings alongside the renamed ones - which is the failure this
+        method exists to make impossible. So it **never writes an entry that
+        was not already banked**: every baseline entry must appear in
+        `mapping`, every `mapping` key must be in the baseline, and two old
+        keys may not collapse onto one new key. Any of those raises and the
+        file on disk is left alone.
+
+            Ratchet("tests/baselines/imports.json").migrate_keys(
+                {"src/a.py:12: ...": "src/a.py::from .x import y"}
+            )
+
+        Returns the new baseline, sorted, as written.
+        """
+        old = self._read_list()
+        if not old:
+            raise RatchetError(
+                f"[{self.name}] nothing to migrate: {self.path} holds no "
+                f"entries. A migration that starts from an empty baseline "
+                f"would only be a way of banking today's findings."
+            )
+        unplaceable = [k for k in old if k not in mapping]
+        if unplaceable:
+            raise RatchetError(
+                f"[{self.name}] {len(unplaceable)} baseline entr(ies) have no "
+                f"new key in the mapping:\n  " + "\n  ".join(sorted(unplaceable))
+                + f"\nEvery banked entry must be placed. Do NOT re-record: "
+                f"--update-baseline cannot tell a renamed entry from a new "
+                f"violation and would bank both."
+            )
+        unbanked = [k for k in mapping if k not in set(old)]
+        if unbanked:
+            raise RatchetError(
+                f"[{self.name}] {len(unbanked)} mapping key(s) are not in the "
+                f"baseline:\n  " + "\n  ".join(sorted(unbanked))
+                + f"\nA migration may only rename what is already banked."
+            )
+        new_keys = [mapping[k] for k in old]
+        collisions = sorted({k for k in new_keys if new_keys.count(k) > 1})
+        if collisions:
+            raise RatchetError(
+                f"[{self.name}] migration is not one to one - "
+                f"{len(collisions)} new key(s) claimed by more than one old "
+                f"entry:\n  " + "\n  ".join(collisions)
+                + f"\nMerging two banked violations into one loses a floor."
+            )
+        out = sorted(set(new_keys))
+        self._write(out)
+        return out
 
     # ── count mode: per-key violation counts (file -> n) ────────────────────
 
@@ -236,29 +357,86 @@ def selfcheck() -> bool:
             pass
 
         listed = Ratchet(Path(td) / "list.json", "list")
-        listed.assert_only_shrinks(["x.py:1", "y.py:2"], update=True)
+        listed.assert_only_shrinks(["x.py::Cls.read", "y.py::parse"], update=True)
 
         try:
-            listed.assert_only_shrinks(["x.py:1", "y.py:2"])
+            listed.assert_only_shrinks(["x.py::Cls.read", "y.py::parse"])
         except RatchetError as exc:
             _fail(f"an unchanged violation set was rejected: {exc}")
 
         try:
-            listed.assert_only_shrinks(["x.py:1", "y.py:2", "z.py:9"])
+            listed.assert_only_shrinks(
+                ["x.py::Cls.read", "y.py::parse", "z.py::sweep"]
+            )
             _fail("a NEW violation was accepted")
         except RatchetError:
             pass
 
         try:
-            listed.assert_only_shrinks(["x.py:1"])
+            listed.assert_only_shrinks(["x.py::Cls.read"])
             _fail("a STALE baseline entry passed instead of demanding removal")
         except RatchetError:
             pass
 
+        # A Violation banks its key and REPORTS its message: the line number
+        # has to reach the reader without reaching the baseline.
+        listed.assert_only_shrinks(
+            [Violation("x.py::Cls.read", "x.py:12: reads without a cap")],
+            update=True,
+        )
+        if json.loads((Path(td) / "list.json").read_text()) != ["x.py::Cls.read"]:
+            _fail("a Violation banked something other than its key")
+        try:
+            listed.assert_only_shrinks(
+                [Violation("x.py::Cls.read", "x.py:12: reads without a cap"),
+                 Violation("x.py::Cls.write", "x.py:40: writes without a cap")]
+            )
+            _fail("a NEW Violation was accepted")
+        except RatchetError as exc:
+            if "x.py:40" not in str(exc):
+                _fail("the report named no line; the message never reached the reader")
+
+        # migrate_keys: renames what is banked and refuses everything else.
+        mig = Ratchet(Path(td) / "mig.json", "mig")
+        mig.assert_only_shrinks(["a.py:12 read", "a.py:30 write"], update=True)
+        try:
+            mig.migrate_keys({"a.py:12 read": "a.py::read"})
+            _fail("a baseline entry with no new key was migrated anyway")
+        except RatchetError:
+            pass
+        try:
+            mig.migrate_keys({"a.py:12 read": "a.py::read",
+                              "a.py:30 write": "a.py::write",
+                              "a.py:99 purge": "a.py::purge"})
+            _fail("migrate_keys BANKED an entry that was never banked")
+        except RatchetError:
+            pass
+        try:
+            mig.migrate_keys({"a.py:12 read": "a.py::read",
+                              "a.py:30 write": "a.py::read"})
+            _fail("two banked entries were merged into one; a floor was lost")
+        except RatchetError:
+            pass
+        if json.loads((Path(td) / "mig.json").read_text()) != [
+            "a.py:12 read", "a.py:30 write"
+        ]:
+            _fail("a REFUSED migration still wrote the baseline")
+        moved = mig.migrate_keys({"a.py:12 read": "a.py::read",
+                                  "a.py:30 write": "a.py::write"})
+        if moved != ["a.py::read", "a.py::write"]:
+            _fail(f"a one-to-one migration produced {moved}")
+        try:
+            mig.assert_only_shrinks(["a.py::read", "a.py::write"])
+        except RatchetError as exc:
+            _fail(f"the migrated baseline did not hold: {exc}")
+
     if ok:
         print(
             "[ratchet] selfcheck ok: growth refused, new entry refused, unbanked "
-            "shrink refused, stale entry refused, vacuous detector refused"
+            "shrink refused, stale entry refused, vacuous detector refused, "
+            "Violation banks its key and reports its line, migrate_keys refuses "
+            "an unplaceable entry / an unbanked one / a merge and moves a "
+            "one-to-one baseline"
         )
     return ok
 

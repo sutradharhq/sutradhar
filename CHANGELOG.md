@@ -7,6 +7,27 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**BREAKING: a ratchet key may no longer contain a line number** (round 18,
+R18-1; record: [docs/rounds/round-018.md](docs/rounds/round-018.md)).
+
+- `detectors.find_unresolved_relative_imports`, `find_order_by_without_limit`,
+  `dead_route_lint.find_dead_routes` and `find_unfailable_assertions` now
+  return `Violation(key, message)` instead of `file:line: ...` strings (or,
+  for `find_order_by_without_limit`, line numbers). The key is the file plus
+  the normalised matched text - `a.cy.ts::.to.not.eq(500)`, `src/a.py::from
+  .util import helper` - with `#2`, `#3` in source order for a repeat of the
+  same text in one file; the line number is in the message. A ratchet banks
+  `.key` and prints `.message`, and plain strings still work, so an adopter's
+  own detectors are unaffected.
+- **Every baseline recorded from those four detectors must be migrated.**
+  Use `Ratchet("...json").migrate_keys({old_key: new_key})`, which rewrites
+  one to one and raises rather than write if any banked entry has no new key,
+  if any mapping key was never banked, or if two entries collapse into one.
+  **Do not use `--update-baseline` / `RATCHET_UPDATE=1`**: it cannot tell a
+  renamed entry from a new violation and banks both.
+- `find_order_by_without_limit` takes a second argument, `path`, so the key
+  can name the file it came from. It defaults to `<src>`.
+
 **Fifteen backflow items decided, five rules appended** (round 17; record:
 [docs/rounds/round-017.md](docs/rounds/round-017.md)).
 
