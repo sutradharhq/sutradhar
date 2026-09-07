@@ -53,18 +53,14 @@ jobs:
       - name: Every step above can reach the script it names
         run: python scripts/ci_step_lint.py .
 
-      # ONLY IF WHAT YOU SHIP IS A FRAMEWORK. A product is SUPPOSED to
-      # speak its own business domain, so this gate is nonsense in most
-      # repos and would be red on day one in all of them - which is how a
-      # guard gets muted (R14-2). It keeps a framework surface from
-      # acquiring an adopter's vocabulary: a numeric literal followed by a
-      # domain unit, and currency, against a baseline whose every entry
-      # carries a written reason (there is no --update-baseline).
-      # Uncomment, write scripts/framework_shape_baseline.json, and the
-      # --diff form gates what is ENTERING rather than what is banked.
-      #
-      # - name: The framework does not speak the adopter's domain
-      #   run: python scripts/framework_shape.py . --diff origin/main
+      # NOT A CI STEP, and this comment is the reason rather than a
+      # placeholder. `framework_shape.py` and `framework_only.py` gate a
+      # promise only the Sutradhar repository itself makes: no dependencies,
+      # and no business domain in the shipped surface. `bootstrap.sh` does
+      # not copy either one, because in YOUR tree they would scan directories
+      # holding nothing but the files you just copied, and could only ever
+      # pass. A guard that cannot fail where you run it is decoration (2.2).
+      # You are building a product; speaking your own domain is the point.
 
       # NOT A CI STEP, and the comment is the finding rather than a
       # placeholder. `ownership_lint.py` refuses a STAGE that reaches into a

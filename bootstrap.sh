@@ -81,8 +81,15 @@ copy "$HERE/python/sutradhar_guards/swallow_lint.py"       "$TARGET/scripts/swal
 copy "$HERE/python/sutradhar_guards/interpolation_lint.py" "$TARGET/scripts/interpolation_lint.py"
 copy "$HERE/python/sutradhar_guards/conflated_degrade_lint.py" "$TARGET/scripts/conflated_degrade_lint.py"
 copy "$HERE/python/sutradhar_guards/ci_step_lint.py"       "$TARGET/scripts/ci_step_lint.py"
-copy "$HERE/python/sutradhar_guards/framework_shape.py"    "$TARGET/scripts/framework_shape.py"
 copy "$HERE/python/sutradhar_guards/ownership_lint.py"     "$TARGET/scripts/ownership_lint.py"
+# framework_only.py and framework_shape.py are deliberately NOT copied.
+# Both gate a promise only THIS repository makes - no dependencies, and no
+# business domain in the shipped surface. In your tree they would scan
+# directories holding nothing but the files you just copied, so they can
+# only ever pass: a guard that cannot fail where you run it is decoration
+# (doctrine 2.2), and telling you to run one teaches a green that means
+# nothing. You are building a product; speaking your own domain is the
+# point.
 copy "$HERE/python/sutradhar_guards/verify_guard.py"       "$TARGET/scripts/verify_guard.py"
 copy "$HERE/python/sutradhar_guards/budget.py"             "$TARGET/scripts/budget.py"
 copy "$HERE/python/sutradhar_guards/rounds.py"             "$TARGET/scripts/rounds.py"
@@ -165,8 +172,6 @@ echo "  2j. if more than one agent works this tree, declare who owns what in"
 echo "      .sutradhar-owners and refuse a stage that reaches into someone else's:"
 echo "      python scripts/ownership_lint.py --owner <your-agent-name>"
 echo "  2i. ONLY IF WHAT YOU SHIP IS A FRAMEWORK - keep it from speaking your"
-echo "      adopter's business domain (a product is supposed to speak its own):"
-echo "      python scripts/framework_shape.py . --diff origin/main"
 echo "  2c. after each robustness round: python scripts/rounds.py docs/rounds/ --floors ."
 echo "  2e. decide what your other repos have learned:"
 echo "      python scripts/rounds.py docs/rounds/ --backflow docs/backflow.md"

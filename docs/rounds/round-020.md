@@ -25,6 +25,7 @@ docs/backflow.md` exits 0 for the first time since round 17.
 | R20-1 | med | 6.11 | the new guard's first run | fixed | `ownership_lint`'s selfcheck drives `main()` on purpose - the CLI is the real seam (2.3), and a case that pokes `audit` directly cannot see a broken argument parser - while `main()` runs the selfcheck before scanning, as every other lint here does. Those two correct decisions are mutual recursion, and the file's first execution was a `RecursionError`: not a red verdict but the absence of one, which is 6.11's whole subject and the third occurrence of that shape in three rounds. Broken with an explicit re-entrancy flag whose comment says why it exists, rather than by dropping either half |
 | R20-2 | med | 2.2 | the mutation run | fixed | the seam mutant for `interpolation_lint` - `_quoted_at` forced to `True`, which should flood the report with `LIMIT %d` - killed one behavioural test and left the SELFCHECK green. Its only unquoted negative case interpolated `n_limit`, which the numeric-suffix heuristic exempts whatever the quoting says, so the case would have passed for a second reason and proved nothing about quoting. A negative case that is also true for another reason is not a negative case. Rewritten with a name carrying no safe suffix; the mutant now kills the selfcheck too |
 | R20-3 | low | 7.2 | wiring a fifth guard into the pre-commit gate | fixed | `docs/design/agent-loop-hooks.md` listed the three guards the gate ran when it was written. Round 19 added `framework_shape` to `_plan` and did not add the row, so the note described a three-guard gate while the code ran four - the stale-status-doc shape 7.2 is about, inside the design note that documents the mechanism. Both missing rows added |
+| R20-4 | med | 2.2 | cold-start drill on the public clone | fixed | `bootstrap.sh` copied `framework_shape.py` into the adopter's `scripts/` and the next-steps text told them to run it, and `ci/guards.yml` named it in a step. In an adopter's tree that gate scans only its own declared surface directories, which there hold nothing but the files just copied, so it cannot fail: simulated a product with `1,240 kWh` and a dollar amount in `src/` and it exited 0. A guard that cannot fail where we tell somebody to run it is decoration, and shipping one teaches a green that means nothing. `framework_only.py` was already correctly not copied for the same reason - both gate a promise only this repository makes. Removed from the bootstrap python layer, from the next-steps text and from the template, each with the reason written where the step would have been. `ci_step_lint` caught the half-finished change: the template still named a script bootstrap no longer copies, which would have failed an adopter's first push on file-not-found |
 
 ## What each item became
 
@@ -288,3 +289,24 @@ copied-set), `ci/guards.yml` (a comment, deliberately not a step),
 and `docs/backflow.md`.
 
 761 tests before, 808 after.
+
+## R20-4: the drill an evaluator runs
+
+This one came from operating the repository as a stranger would rather than
+from reading it: clone the public URL on a clean path, run the command the
+README leads with, then bootstrap into an empty repo and run what the
+next-steps text says to run.
+
+Most of it held. Seven of seven planted defects caught from a cold clone,
+all eighteen guard selfchecks green with plain `python3` and nothing
+installed, every relative link resolving. What did not hold was the advice:
+we were telling an adopter to run a gate that cannot fail in their tree.
+
+Two things are worth keeping from it. The first is that the fix was
+incomplete and a guard written two rounds ago caught it - removing the file
+from `bootstrap.sh` left `ci/guards.yml` naming a script that would no
+longer be there, which is R18-3's class exactly, and `ci_step_lint` refused
+it before it shipped. The second is that the first run of the drill
+reported exit 127 and it was `timeout`, absent on this platform, inside the
+drill's own wrapper rather than anything in the repository (6.4). A false
+finding about your own front door is still a false finding.
