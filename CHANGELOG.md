@@ -7,6 +7,48 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Round 20 - the backflow register decided** (record:
+[docs/rounds/round-020.md](docs/rounds/round-020.md)). Nine overdue items,
+eight adopted and one rejected; `rounds.py --backflow` exits 0 again.
+
+- **New guard: `ownership_lint.py`** (B-16, doctrine 7.3) - refuses a staged
+  path another agent's manifest claims, naming the owner; unowned paths are
+  allowed and counted; a missing manifest exits 0 and says nothing was
+  checked. Manifest format is `<owner>: <glob> ...`, one owner per line, and
+  a row it cannot read is refused rather than skipped. Exit 0 clean, 1 a
+  foreign path, 2 could not run. Wired into `bootstrap.sh`
+  (`scripts/ownership_lint.py`), both CI selfcheck lists, the plugin bundle
+  (now ten guard programs) and the pre-commit hook. Deliberately NOT a CI
+  step: the index is empty in CI, so it could never fail there.
+- **POTENTIALLY NEWLY FLAGGING: `interpolation_lint.py` now reads
+  `%`-formatting and `str.format()`**, not only f-strings (B-20, doctrine
+  2.8). `"SELECT ... n = '%s'" % name` and `"... = '{}'".format(name)` are
+  flagged on the same terms an f-string always was. **A codebase that has
+  been green under this guard can go red on the first run after taking
+  this** - those holes are real and its baseline has never seen them.
+  Unchanged: `--safe-suffix` names, `--allowlist`, `--safe-call`,
+  `--strict`, the quoted-position default, and every existing f-string
+  verdict. `%` or `.format()` on a string carrying no query keyword is not
+  flagged, and a format string held in a module constant is still not seen
+  (stated as a limitation, with a test pinning it).
+- **`DOCTRINE.md`: four rules gained text, none added, none renumbered.**
+  2.2 - mutate the line that RUNS (B-21, practice). 2.6 - a cap must count
+  the unit that GROWS (B-25). 2.8 - one clause naming the two new spellings
+  (B-20, practice). 6.6 - a claim about a running system is verified against
+  the running system, public copy included (B-26), and the existing
+  rows-per-run scar now names its second independent instance (B-24, adopted
+  as convergence evidence rather than as new text).
+- **`agent/skills/ops-drill.md` gained two sections** (B-22, B-23, doctrine
+  6.1): a dependency-order boot procedure that asserts what an operator sees
+  at each layer rather than what the code returns, and the cold-start half
+  for lockfiles - one claim, tested only by installing on a second machine.
+  Runtime-agnostic; no guard, because a working drill is application-specific.
+- **`ci/guards.yml`** carries a comment where an `ownership_lint` step would
+  go, saying why it is not one.
+- **`docs/design/agent-loop-hooks.md`** guard table now lists all five guards
+  the pre-commit gate plans; it had missed `framework_shape` since round 19
+  (R20-3).
+
 **New guard: `framework_shape.py`** (round 19, R19-1; record:
 [docs/rounds/round-019.md](docs/rounds/round-019.md)). The axis
 `framework_only` cannot see - a framework that has started speaking one
