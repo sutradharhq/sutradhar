@@ -1,5 +1,11 @@
 # Sutradhar
 
+[![guards](https://github.com/sutradharhq/sutradhar/actions/workflows/selftest.yml/badge.svg)](https://github.com/sutradharhq/sutradhar/actions/workflows/selftest.yml)
+[![release](https://img.shields.io/github/v/release/sutradharhq/sutradhar)](https://github.com/sutradharhq/sutradhar/releases)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![no dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](SECURITY.md)
+
+
 **An engineering harness for AI coding agents.**
 
 Sutradhar (सूत्रधार) is the stage director in Sanskrit theatre, the one who
@@ -10,6 +16,36 @@ and machine, work on it at once.
 It is a complete harness: backend, frontend, operations, and the agent
 workflow itself. Every rule in it was paid for by a real defect on a real
 production-bound codebase. None of it is aspiration.
+
+## See it catch something first
+
+![Seven real defects surfacing from a green test suite](docs/media/demo.gif)
+
+```bash
+git clone https://github.com/sutradharhq/sutradhar.git
+cd sutradhar && bash examples/run-the-guards.sh
+```
+
+Ten seconds, no install beyond `pytest` (the demo's one requirement; it
+tells you if it's missing). A small app whose test suite is green, and seven
+real defects surfacing out of it: an outage swallowed into an empty dict, a
+model inventing the numbers in a customer summary, a billing test that has
+never run in any environment, a test that cannot fail. Then read on for why
+each one is in there.
+
+## Put it in your agent's loop
+
+Two commands, and the guards run whether or not the agent remembers they
+exist. A `PreToolUse` hook gates `git commit` and denies it with the
+guard's own output when one is red.
+
+```
+/plugin marketplace add sutradharhq/sutradhar
+/plugin install sutradhar@sutradhar
+```
+
+Read [SECURITY.md](SECURITY.md) before you install it: it says plainly what
+runs as you, where, and what the parser does and does not stop.
 
 ## Framework, not a product
 
@@ -43,22 +79,6 @@ floor and says so: it cannot see an ordinary business noun, and the
 For how this compares to an agent runtime like DeepSeek Harness, see
 [docs/comparisons/deepseek-harness.md](docs/comparisons/deepseek-harness.md) -
 short version: different layers, they compose.
-
-## See it catch something first
-
-![Seven real defects surfacing from a green test suite](docs/media/demo.gif)
-
-```bash
-git clone https://github.com/sutradharhq/sutradhar.git
-cd sutradhar && bash examples/run-the-guards.sh
-```
-
-Ten seconds, no install beyond `pytest` (the demo's one requirement; it
-tells you if it's missing). A small app whose test suite is green, and seven
-real defects surfacing out of it: an outage swallowed into an empty dict, a
-model inventing the numbers in a customer summary, a billing test that has
-never run in any environment, a test that cannot fail. Then read on for why
-each one is in there.
 
 ## Why this exists
 
