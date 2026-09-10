@@ -76,7 +76,7 @@ driven over stdio, asked to verify a real commit in this repository.
 
     server/discover -> supportedVersions ["2026-07-28", "2025-11-25", "2025-06-18"]
     tools/list      -> 9 tools
-    tools/call verify_guard {commit: HEAD (1677d14),
+    tools/call verify_guard {commit: HEAD (4edac3a),
                              guard_cmd: pytest python/tests/test_obsgate_depth.py}
 
 **Verdict actually returned: `VERIFIED`, exit 0, `isError: false`, 3,948 ms**,
