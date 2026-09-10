@@ -39,6 +39,8 @@ Two commands, and the guards run whether or not the agent remembers they
 exist. A `PreToolUse` hook gates `git commit` and denies it with the
 guard's own output when one is red.
 
+![A commit denied by the pre-commit hook, naming the file and the line](docs/media/blocked-commit.svg)
+
 ```
 /plugin marketplace add sutradharhq/sutradhar
 /plugin install sutradhar@sutradhar
