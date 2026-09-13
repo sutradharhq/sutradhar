@@ -84,6 +84,122 @@ def test_import_error_is_a_weak_red():
     assert weak and "weaker proof" in why
 
 
+# ── grading a red, through the real seam, under both runners (R21-3) ────────
+#
+# unittest prints `FAILED (errors=1)` for a test module that could not import
+# and `FAILED (failures=1)` for an assertion that failed, and both exit 1. The
+# grader matched `FAILED ` and certified the import crash as "failed by
+# assertion - it discriminates on behaviour"; pytest's report of the same
+# crash has no `FAILED ` in it and graded weak. So the four cases are one
+# pair per runner, run end to end: a throwaway repository, a real fix commit,
+# `verify` reverting it, and the runner's own output being graded.
+
+_PARENT = "def total(price, qty):\n    return price * qty\n"
+_FIX_BEHAVIOUR = ("def total(price, qty):\n    subtotal = price * qty\n"
+                  "    if qty >= 10:\n        subtotal *= 0.9\n    return subtotal\n")
+# The fix adds a function; the revert removes it, and the test imports it.
+_FIX_SYMBOL = _PARENT + "\n\ndef discount(subtotal):\n    return subtotal * 0.9\n"
+
+_TESTS = {
+    ("unittest", "behaviour"): (
+        "import unittest\nfrom calc import total\n\n\nclass T(unittest.TestCase):\n"
+        "    def test_bulk_discount(self):\n"
+        "        self.assertEqual(total(100, 10), 900.0)\n"),
+    ("unittest", "symbol"): (
+        "import unittest\nfrom calc import discount\n\n\nclass T(unittest.TestCase):\n"
+        "    def test_discount(self):\n"
+        "        self.assertEqual(discount(1000), 900.0)\n"),
+    ("pytest", "behaviour"): (
+        "from calc import total\n\n\ndef test_bulk_discount():\n"
+        "    assert total(100, 10) == 900.0\n"),
+    ("pytest", "symbol"): (
+        "from calc import discount\n\n\ndef test_discount():\n"
+        "    assert discount(1000) == 900.0\n"),
+}
+
+
+def _runner_repo(tmp_path: Path, runner: str, revert: str) -> tuple[Path, str]:
+    """(repo, guard command): a parent without the fix, then the fix + test."""
+    root = tmp_path / f"{runner}-{revert}"
+    root.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(root), "-c", "user.name=t",
+                        "-c", "user.email=t@example.invalid",
+                        "-c", "commit.gpgsign=false", *args],
+                       check=True, capture_output=True, text=True)
+
+    git("init", "-q")
+    (root / "calc.py").write_text(_PARENT)
+    git("add", "calc.py")
+    git("commit", "-q", "-m", "parent")
+    (root / "calc.py").write_text(_FIX_SYMBOL if revert == "symbol" else _FIX_BEHAVIOUR)
+    (root / "tests").mkdir()
+    (root / "tests" / "__init__.py").write_text("")
+    (root / "tests" / "test_calc.py").write_text(_TESTS[(runner, revert)])
+    git("add", "calc.py", "tests")
+    git("commit", "-q", "-m", "fix")
+    py = __import__("shlex").quote(sys.executable)
+    cmd = (f"{py} -m unittest tests.test_calc" if runner == "unittest"
+           else f"{py} -m pytest -q -p no:cacheprovider tests/test_calc.py")
+    return root, cmd
+
+
+@pytest.mark.parametrize("runner,revert,weak,wording", [
+    # (a) the defect: graded "failed by assertion" before R21-3
+    ("unittest", "symbol", True, "went red by ERRORING"),
+    ("unittest", "behaviour", False, "failed by assertion"),   # (b)
+    ("pytest", "symbol", True, "failing to LOAD"),            # (c) unchanged
+    ("pytest", "behaviour", False, "failed by assertion"),     # (d) unchanged
+])
+def test_a_red_is_graded_by_how_it_went_red_under_either_runner(
+        tmp_path, runner, revert, weak, wording):
+    root, cmd = _runner_repo(tmp_path, runner, revert)
+    res = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120)
+    assert res.verdict == vg.VERIFIED, res.reason
+    assert res.weak is weak, (
+        f"{runner}, a revert that {'removed an imported symbol' if revert == 'symbol' else 'changed behaviour'}: "
+        f"graded weak={res.weak}, want weak={weak}.\n{res.reason}")
+    # The words are pinned as well as the flag: the unittest branch reads the
+    # runner's own counts, and a generic fallback that happened to reach the
+    # same flag would leave that branch with no test of its own.
+    assert wording in res.reason, res.reason
+    if weak:
+        assert "weaker proof" in res.reason and "by assertion" not in res.reason
+
+
+def test_a_unittest_error_raised_at_run_time_is_weak_too():
+    """Not every unittest ERROR is an import. A revert that leaves the module
+    importable and removes an attribute the test reaches at run time raises
+    AttributeError - no load failure pattern at all - and it is still not
+    an assertion."""
+    weak, why = vg.grade_red(
+        "ERROR: test_discount (tests.test_calc.T.test_discount)\n"
+        "AttributeError: module 'calc' has no attribute 'discount'\n\n"
+        "Ran 1 test in 0.000s\n\nFAILED (errors=1)\n")
+    assert weak and "went red by ERRORING" in why
+
+
+def test_a_unittest_run_with_a_real_failure_beside_an_error_is_still_by_assertion():
+    """A failure is an AssertionError that fired, and it discriminated; an
+    import error elsewhere in the same run does not unsay that."""
+    weak, why = vg.grade_red(
+        "ERROR: test_other (unittest.loader._FailedTest)\nImportError: x\n"
+        "FAIL: test_total (tests.test_calc.T)\nAssertionError: 1000 != 900.0\n"
+        "Ran 2 tests in 0.001s\n\nFAILED (failures=1, errors=1)\n")
+    assert not weak and "1 failure(s), 1 error(s)" in why
+
+
+def test_a_failed_import_is_weak_even_without_unittest_s_summary_line():
+    """A runner built on unittest's loader can print the `_FailedTest` a
+    module that did not import becomes and never print `FAILED (...)`. With
+    no assertion anywhere in the output that is still a load failure."""
+    weak, why = vg.grade_red(
+        "ERROR: test_calc (unittest.loader._FailedTest.test_calc)\n"
+        "ImportError: Failed to import test module: test_calc\n")
+    assert weak and "weaker proof" in why
+
+
 # ── end to end, on real git repos ───────────────────────────────────────────
 
 def test_selfcheck_classification_passes():

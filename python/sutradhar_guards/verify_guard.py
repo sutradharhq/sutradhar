@@ -60,7 +60,9 @@ Honest limits, stated plainly:
   - A guard can go red for the wrong reason (the revert breaks an import
     and nothing even loads). That is a weaker proof than a discriminating
     assertion, so it is reported as VERIFIED (weak) rather than silently
-    counted as a clean pass.
+    counted as a clean pass. unittest is graded by its own counts - errors
+    and no failures is weak - because its `FAILED (errors=1)` for an import
+    crash reads, to a pattern, exactly like an assertion (R21-3).
   - Reverting is per-file, not per-hunk. A commit that mixes a fix and an
     unrelated change in one file reverts both; split your commits (or pass
     `--code` explicitly) if that matters.
@@ -430,18 +432,63 @@ _DISCRIMINATING = re.compile(
     re.IGNORECASE,
 )
 
+#: unittest's closing line: `FAILED (failures=1)`, `FAILED (errors=1)`,
+#: `FAILED (failures=1, errors=2, skipped=1)`. pytest never prints `FAILED (`
+#: - its summary lines read `FAILED path::test - ...` - so this reads unittest
+#: and leaves pytest's grading exactly as it was.
+_UNITTEST_SUMMARY = re.compile(r"^FAILED \((?P<counts>[^)]*)\)\s*$", re.MULTILINE)
+_UNITTEST_COUNT = re.compile(r"([a-z][a-z ]*)=(\d+)")
+
+_WEAK_LOAD = (
+    "the guard went red by failing to LOAD (import/collection error), "
+    "not by asserting. Removing the fix breaks the build, which is a "
+    "weaker proof than a discriminating assertion - the guard has not "
+    "been shown to distinguish correct behaviour from incorrect."
+)
+
 
 def grade_red(output: str) -> tuple[bool, str]:
-    """(is_weak, explanation). Best-effort text inspection, reported as such."""
+    """(is_weak, explanation). Best-effort text inspection, reported as such.
+
+    unittest is read by its own counts first (R21-3). It counts an
+    AssertionError as a FAILURE and anything else a test raises - including
+    a test module that could not import, which it wraps in `_FailedTest` - as
+    an ERROR, and both end in a line starting `FAILED `. The generic pattern
+    below matches that word, so a revert that deleted a symbol the test
+    imports graded as "failed by assertion - it discriminates on behaviour"
+    under unittest while the same crash under pytest graded weak. A proof
+    reported one strength stronger than it is, in the word nobody re-derives
+    (6.9).
+    """
+    summaries = list(_UNITTEST_SUMMARY.finditer(output))
+    if summaries:
+        last = summaries[-1]
+        counts = {k.strip(): int(v) for k, v in _UNITTEST_COUNT.findall(last.group("counts"))}
+        failures, errors = counts.get("failures", 0), counts.get("errors", 0)
+        if failures:
+            return False, (
+                f"the guard failed by assertion - it discriminates on behaviour "
+                f"(unittest: {failures} failure(s), {errors} error(s))."
+            )
+        if errors:
+            return True, (
+                f"the guard went red by ERRORING, not by asserting: unittest "
+                f"reported {errors} error(s) and no failure, which is how it "
+                f"reports a test module that did not import or a test that "
+                f"raised before any assertion ran. That is a weaker proof than "
+                f"a discriminating assertion - the guard has not been shown to "
+                f"distinguish correct behaviour from incorrect."
+            )
+        # Neither count (an unexpected success, say): judge the rest of the
+        # text on the generic terms, without the summary's own `FAILED `.
+        output = output[:last.start()] + output[last.end():]
+    elif "_FailedTest" in output and "AssertionError" not in output:
+        return True, _WEAK_LOAD
+
     broke = bool(_HARNESS_BREAKAGE.search(output))
     asserted = bool(_DISCRIMINATING.search(output))
     if broke and not asserted:
-        return True, (
-            "the guard went red by failing to LOAD (import/collection error), "
-            "not by asserting. Removing the fix breaks the build, which is a "
-            "weaker proof than a discriminating assertion - the guard has not "
-            "been shown to distinguish correct behaviour from incorrect."
-        )
+        return True, _WEAK_LOAD
     return False, "the guard failed by assertion - it discriminates on behaviour."
 
 

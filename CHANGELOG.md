@@ -25,6 +25,18 @@ upgrade by diffing against the tag they took.
   MCP server's error for an exit 2 now leads with the guard's sentence
   rather than "the guard crashed".
 
+**`verify_guard` no longer certifies a unittest import crash as an
+assertion** (R21-3).
+
+- unittest prints `FAILED (errors=1)` when a test module cannot import and
+  `FAILED (failures=1)` when an assertion fails. The grader matched the
+  word `FAILED`, so a revert that deleted a symbol the test imports came
+  back `VERIFIED` - "failed by assertion, it discriminates on behaviour" -
+  while the same crash under pytest came back `VERIFIED (weak)`. unittest
+  is now graded by its own counts: errors and no failures is weak. The
+  verdict and exit code are unchanged; the strength and its sentence are
+  what move. Pytest grading is unchanged.
+
 ## v0.5.2 - 2026-09-13
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP
