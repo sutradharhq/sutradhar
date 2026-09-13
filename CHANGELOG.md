@@ -7,24 +7,59 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
-**SECURITY, and a correction to v0.5.0's claims** (round 20, R20-5 to
-R20-7; found by an independent review after the tag).
+## v0.5.2 - 2026-09-13
 
-- **BREAKING: the `Stop` hook no longer runs a `Guard-cmd:` trailer by
-  default.** It reports the trailer and prints the command. The round-16
-  gate that ran it when HEAD's author email matched yours was decoration:
-  an author email is self-asserted and public, so a hostile commit sets it
-  to yours and checking out the branch is enough. Set
-  `SUTRADHAR_RUN_TRAILERS=1` to opt a tree you control back in.
+**SECURITY: v0.5.1's fix never reached an installed plugin** (round 21,
+R21-1).
+
+- `plugin/.claude-plugin/plugin.json` declared `"version": "0.3.0"` from
+  the day the plugin was added, and nobody bumped it. Claude Code uses that
+  string as the key that decides whether an update exists, so
+  `/plugin update` compared 0.3.0 with 0.3.0 and kept the installed copy.
+  Anyone who installed the plugin before v0.5.1 was still running v0.5.0's
+  `Stop` hook - the one that could run a stranger's command. The manifest
+  now declares no version, so Claude Code resolves it from the commit and
+  every push is an update it can see.
+- **If you installed the plugin, run `/plugin marketplace update sutradhar`
+  and then `/plugin update sutradhar@sutradhar`.** Auto-update is off by
+  default for third-party marketplaces, so nothing arrives on its own.
+- `__version__` and the MCP server's `serverInfo.version` also still said
+  0.3.0. Both now name this release, and a test fails when either
+  disagrees with the newest release heading in this file, or when a plugin
+  manifest or marketplace entry declares a version again.
+- This file gained the v0.5.0 and v0.5.1 headings it should have had at
+  each tag, and v0.5.1's entry is corrected below.
+
+## v0.5.1 - 2026-09-08
+
+**SECURITY, and a correction to v0.5.0's claims** (round 20, R20-5 to
+R20-8; found by an independent review after the tag).
+
+> Corrected 2026-09-13. Until v0.5.2 this entry sat under Unreleased and
+> described an intermediate fix that never shipped - a `Stop` hook that ran
+> no trailer at all, and an MCP server that refused every URL. The v0.5.1
+> release notes described what shipped; this entry now does too.
+
+- **The `Stop` hook runs a `Guard-cmd:` trailer only when HEAD is not yet
+  on any remote** - your own unpushed work, which is what it exists to
+  check. The round-16 gate that ran it when HEAD's author email matched
+  yours was decoration: an author email is self-asserted and public, so a
+  hostile commit sets it to yours and checking out the branch was enough.
+  Anything that arrived by a fetch, a pull or a checkout is reported with
+  the command for you to run. `SUTRADHAR_RUN_TRAILERS=1` runs trailers
+  regardless.
 - **`SECURITY.md` was wrong about the network.** `obsgate` opens a URL you
   pass it and always has; the document said no guard did. It now names the
-  one that does. The MCP server refuses a URL in `metrics` unless
-  `SUTRADHAR_MCP_ANY_URL=1`, and confines a path as it confines `repo`.
+  one that does. Through the MCP server, where the argument comes from a
+  model, `metrics` reads loopback with no configuration and refuses any
+  other host unless `SUTRADHAR_MCP_ANY_URL=1`; a path is confined as `repo`
+  is.
 - `verify_guard`'s parser is described for what it is: it stops a command
   from accidentally becoming a pipeline, and accepts `bash -c '...'`,
   because it is not a sandbox and does not claim to be one.
 - `bootstrap.sh`'s next steps no longer end a sentence mid-air.
 
+## v0.5.0 - 2026-09-08
 
 **Round 20 - the backflow register decided** (record:
 [docs/rounds/round-020.md](docs/rounds/round-020.md)). Nine overdue items,

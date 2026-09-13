@@ -20,7 +20,7 @@ earned it and the usage pattern.
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
-__version__ = "0.3.0"
+__version__ = "0.5.2"
 
 # Exports are resolved LAZILY (PEP 562). Importing the submodules eagerly
 # here made `python -m sutradhar_guards.budget` emit, on every single run:

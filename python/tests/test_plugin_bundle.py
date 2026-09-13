@@ -190,6 +190,57 @@ def test_marketplace_manifest_resolves_to_a_real_plugin():
             f"installing it would find no plugin there")
 
 
+# ── the update signal ───────────────────────────────────────────────────────
+
+_RELEASE_HEADING = re.compile(r"^## v(\d+)\.(\d+)\.(\d+)\b", re.MULTILINE)
+
+
+def test_no_manifest_pins_the_installed_plugin_to_a_version():
+    """R21-1. Read against the plugin reference ("Version management") on
+    2026-09-13: Claude Code takes the first of plugin.json's `version`, the
+    marketplace entry's `version`, then the commit SHA, and that value is
+    the key that decides whether an update exists at all.
+
+    plugin.json said 0.3.0 from the day it was written. v0.5.1's security
+    fix changed the `Stop` hook, `/plugin update` compared 0.3.0 with 0.3.0,
+    and everyone who had installed the plugin kept the vulnerable copy while
+    the release notes told them to upgrade. With neither field set, every
+    commit is a version Claude Code can see."""
+    plugin = json.loads(
+        (PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert "version" not in plugin, (
+        f"plugin.json declares version {plugin['version']!r}: an installed "
+        f"plugin now updates only when that string changes, and a fix pushed "
+        f"without bumping it never reaches anyone who already installed")
+    market = json.loads((REPO_ROOT / ".claude-plugin" / "marketplace.json")
+                        .read_text(encoding="utf-8"))
+    for entry in market["plugins"]:
+        assert "version" not in entry, (
+            f"marketplace entry {entry['name']!r} declares version "
+            f"{entry['version']!r}, which pins installed copies the same way")
+
+
+def test_every_version_string_names_the_newest_release():
+    """R21-1's other half. `__version__` and the MCP server's
+    `serverInfo.version` said 0.3.0 through three releases, so nothing in a
+    copied guard or a running server could say which release it came from.
+    The newest `## vX.Y.Z` heading in CHANGELOG.md is where a release is
+    written down in the tree - CI checks out without tags - so both must
+    name it."""
+    from sutradhar_guards.mcp_server import SERVER_VERSION
+
+    text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    releases = [tuple(int(p) for p in m) for m in _RELEASE_HEADING.findall(text)]
+    assert releases, "CHANGELOG.md has no '## vX.Y.Z' heading to compare with"
+    newest = ".".join(str(p) for p in max(releases))
+    assert sutradhar_guards.__version__ == newest, (
+        f"sutradhar_guards.__version__ is {sutradhar_guards.__version__}, "
+        f"the newest CHANGELOG release is {newest}")
+    assert SERVER_VERSION == newest, (
+        f"mcp_server.SERVER_VERSION is {SERVER_VERSION}, the newest "
+        f"CHANGELOG release is {newest}")
+
+
 # ── the installed condition, reproduced ─────────────────────────────────────
 
 class _BundledServer:

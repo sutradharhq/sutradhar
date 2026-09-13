@@ -73,7 +73,7 @@ import time
 from pathlib import Path
 
 SERVER_NAME = "sutradhar-guards"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.5.2"
 
 # Verified against the specification on 2026-09-02; see docs/design/mcp-server.md
 # for the page URLs. Newest first - `server/discover` reports this list, and a
