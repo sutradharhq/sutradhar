@@ -962,6 +962,19 @@ def _print_human(res: Result) -> None:
     print(f"[verify-guard] {bar}\n")
 
 
+#: Every argument the CLI reads. Anything else is refused as INCONCLUSIVE
+#: rather than skipped (R21-14): a skipped `--gaurd-paths` runs a different
+#: verification than the one asked for and still reports a verdict on it.
+_VALUE_FLAGS = frozenset({
+    "--commit", "--guard-cmd", "--setup-cmd", "--repo", "--timeout",
+    "--code", "--guard-paths", "--link",
+})
+_BARE_FLAGS = frozenset({
+    "--json", "--keep-worktree", "--require-guard-in-commit",
+    "--selfcheck", "--help", "-h",
+})
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
@@ -985,27 +998,46 @@ def main(argv: list[str] | None = None) -> int:
     keep = "--keep-worktree" in argv
     require_guard = "--require-guard-in-commit" in argv
 
+    def refuse(why: str) -> int:
+        # An argument this tool cannot read is INCONCLUSIVE: no guard ran.
+        # It used to be skipped (a typo'd flag silently dropped) or to raise
+        # (IndexError, ValueError), and a traceback exits 1, which is
+        # DECORATION's code - a verdict about a guard nobody ran (R21-14).
+        res = Result(INCONCLUSIVE, f"{why} Nothing was run. See --help.")
+        print(res.to_json() if as_json else f"[verify-guard] {res.reason}")
+        return res.exit_code
+
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg == "--commit":
-            commit = argv[i + 1]; i += 2
-        elif arg == "--guard-cmd":
-            guard_cmd = argv[i + 1]; i += 2
-        elif arg == "--setup-cmd":
-            setup_cmd = argv[i + 1]; i += 2
-        elif arg == "--repo":
-            repo = Path(argv[i + 1]); i += 2
-        elif arg == "--timeout":
-            timeout = int(argv[i + 1]); i += 2
-        elif arg == "--code":
-            code_patterns.append(argv[i + 1]); i += 2
-        elif arg == "--guard-paths":
-            guard_patterns.append(argv[i + 1]); i += 2
-        elif arg == "--link":
-            links.append(argv[i + 1]); i += 2
-        else:
+        if arg in _BARE_FLAGS:
             i += 1
+            continue
+        if arg not in _VALUE_FLAGS:
+            return refuse(f"unknown argument {arg!r}.")
+        if i + 1 >= len(argv):
+            return refuse(f"{arg} needs a value and was given none.")
+        value = argv[i + 1]
+        i += 2
+        if arg == "--commit":
+            commit = value
+        elif arg == "--guard-cmd":
+            guard_cmd = value
+        elif arg == "--setup-cmd":
+            setup_cmd = value
+        elif arg == "--repo":
+            repo = Path(value)
+        elif arg == "--timeout":
+            try:
+                timeout = int(value)
+            except ValueError:
+                return refuse(f"--timeout {value!r} is not a whole number of seconds.")
+        elif arg == "--code":
+            code_patterns.append(value)
+        elif arg == "--guard-paths":
+            guard_patterns.append(value)
+        elif arg == "--link":
+            links.append(value)
 
     try:
         root = _git(repo, "rev-parse", "--show-toplevel").strip()

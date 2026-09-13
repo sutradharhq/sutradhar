@@ -236,6 +236,29 @@ def test_missing_guard_cmd_is_inconclusive(tmp_path):
     assert res.verdict == vg.INCONCLUSIVE and res.exit_code == 2
 
 
+@pytest.mark.parametrize("tail,said", [
+    # A typo'd flag was skipped, so the run went ahead without it.
+    (["--guard-cmd", "true", "--gaurd-paths", "tests/"], "unknown argument '--gaurd-paths'"),
+    (["--guard-cmd", "true", "stray"], "unknown argument 'stray'"),
+    # A flag with no value raised IndexError: exit 1, which is DECORATION's code.
+    (["--guard-cmd"], "--guard-cmd needs a value"),
+    (["--guard-cmd", "true", "--timeout", "soon"], "not a whole number of seconds"),
+])
+def test_an_argument_the_cli_cannot_read_is_inconclusive_never_a_verdict(tmp_path, tail, said):
+    """R21-14, at the CLI seam. `--repo` names a directory that is not a git
+    repository, so a parser that skipped the bad argument still exits 2 - and
+    fails here on the words, because it never says what it refused."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "sutradhar_guards.verify_guard",
+         "--repo", str(tmp_path), *tail],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
+    assert said in proc.stdout, proc.stdout + proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+
+
 # ── what a guard command is allowed to be (R16-3) ───────────────────────────
 #
 # This tool runs the command it is handed, as the user running it, and the

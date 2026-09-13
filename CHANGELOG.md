@@ -58,6 +58,15 @@ assertion** (R21-3).
 - A target that is not a directory now exits 2, like every other argument
   bootstrap refuses, rather than 1.
 
+**`verify_guard` refuses an argument it cannot read** (R21-14).
+
+- An unrecognised argument used to be skipped, so a typo such as
+  `--gaurd-paths` ran a different verification from the one asked for and
+  still returned a verdict. A flag with no value, or a `--timeout` that is
+  not a number, raised a traceback, and its exit 1 is DECORATION's code.
+  All three are now INCONCLUSIVE, exit 2, with the argument named. Correctly
+  spelled command lines are unaffected.
+
 ## v0.5.2 - 2026-09-13
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP
