@@ -54,6 +54,13 @@ Usage:
     python conflated_degrade_lint.py src/ --update-baseline  # record the floor
     python conflated_degrade_lint.py --selfcheck             # prove it works
 
+Exit 0 at or below the floor, 1 a new conflation or an unbanked fix, 2 the
+check could not run: an unknown flag, no path, a duplicate key, or paths
+that hold no Python file at all. 2 is not a pass. Named paths that held
+nothing used to print ``OK (0 file(s) ...)`` and exit 0, which refused the
+default directory nobody named and then accepted a named one nobody could
+read (R21-2).
+
 The ratchet is implemented here rather than imported from ``ratchet.py`` for
 the same reason ``swallow_lint.py`` does it: these files are copy-in and land
 in different directories in an adopter's tree, so a cross-module import would
@@ -286,13 +293,62 @@ def read():
 '''
 
 
+#: `main` runs the selfcheck before it scans, and the selfcheck drives `main`
+#: to prove the CLI refuses an empty scan - two correct decisions that are
+#: mutual recursion without this flag (R20-1).
+_IN_SELFCHECK = False
+
+
 def selfcheck() -> bool:
     """A known-good and a known-bad half for every claim this guard makes.
 
     An exit code is a claim about a process, not about a check (6.7), so
     each case below names what it exercised and the pass line lists them.
     """
+    global _IN_SELFCHECK
+    if _IN_SELFCHECK:
+        return True
+    _IN_SELFCHECK = True
+    try:
+        return _selfcheck_body()
+    finally:
+        _IN_SELFCHECK = False
+
+
+def _selfcheck_body() -> bool:
+    import contextlib
+    import io
+    import tempfile
+
     problems: list = []
+
+    # Through the CLI, in a pair: named paths holding no Python file are
+    # refused with 2 and say so, and one clean file passes - otherwise the
+    # refusal could be refusing everything and still look right (R21-2).
+    def cli(args: list) -> tuple:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(args)
+        return code, out.getvalue() + err.getvalue()
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "README.md").write_text("no python here\n", encoding="utf-8")
+        args = [str(root), "--baseline", str(root / "none.json")]
+        rc, said = cli(args)
+        if rc != 2 or "nothing was scanned" not in said:
+            problems.append(
+                f"a directory with no Python file exited {rc}, not 2 with a "
+                f"'nothing was scanned' line; an OK over zero files is a pass "
+                f"for a check that never ran: {said!r}"
+            )
+        (root / "clean.py").write_text("x = 1\n", encoding="utf-8")
+        rc, said = cli(args)
+        if rc != 0:
+            problems.append(
+                f"one clean file exited {rc}, not 0; the empty-scan refusal "
+                f"would be refusing everything: {said!r}"
+            )
 
     bad = find_conflated_degrades(_BAD)
     if not bad:
@@ -341,7 +397,8 @@ def selfcheck() -> bool:
             "[conflated-degrade-lint] selfcheck ok: conflation caught, "
             "(value, ok) passed, re-raise passed, keys unchanged by lines "
             "inserted above them, new conflation reported, separated entry "
-            "reported for banking, same-named defs keyed apart"
+            "reported for banking, same-named defs keyed apart, a directory "
+            "with no Python file refused with exit 2, one clean file passed"
         )
     return not problems
 
@@ -455,6 +512,27 @@ def main(argv: "list | None" = None) -> int:
             f"directories ({', '.join(sorted(VENDOR_DIRS)[:4])}, ...); pass "
             f"--include-vendor to scan them"
         )
+
+    # Zero files read is "could not measure", never "at the floor" (2.9),
+    # and that holds for --update-baseline too: a floor recorded over
+    # nothing is a floor of nothing (R21-2).
+    if not files:
+        states = ", ".join(
+            f"{p} ({'does not exist' if not p.exists() else 'is not a .py file' if p.is_file() else 'holds no .py file'})"
+            for p in paths
+        )
+        print(
+            f"[conflated-degrade-lint] nothing was scanned: {states}"
+            + (f"; the {skipped} .py file(s) found are all under vendor "
+               f"directories, and --include-vendor scans them"
+               if skipped else "")
+            + ". This is not a pass (2.9). Name the directory that holds your "
+            "Python source; a repository with no Python has nothing for this "
+            "guard to read, so remove its CI step rather than keep a check "
+            "that cannot run.",
+            file=sys.stderr,
+        )
+        return 2
 
     keys = [f.key for f in found]
     if len(set(keys)) != len(keys):

@@ -15,7 +15,9 @@ Three rules it will not bend:
 
   1. **A guard that could not run has not passed** (2.9). A missing
      baseline, an absent `docs/rounds/`, no staged Python: each is reported
-     by name as skipped, and never folded into a green verdict.
+     by name as skipped, and never folded into a green verdict. So is a
+     guard that ran and exited 2 to say it could not check - a lint whose
+     scan read no file, since R21-2 - quoted in its own words.
   2. **An instrument failure is ours** (2.4). Missing guard, spawn error,
      timeout, an exit code outside the guard's partition, a bug in this
      file: say so, name the party, and ALLOW. A gate that blocks because it
@@ -54,10 +56,14 @@ except Exception as exc:  # pragma: no cover - exercised by the import mutant
 
 SHELL_TOOLS = ("Bash", "PowerShell")
 
-# Exit-code partitions, quoted from docs/design/mcp-server.md. Exit 2 is a
-# USAGE error for every guard planned below, which makes it an instrument
-# failure and not a finding.
-LINT_CODES = {0: H.GREEN, 1: H.RED}
+# Exit-code partitions. Every guard planned below documents exit 2 as "the
+# check could not run": an unknown flag, an unreadable baseline or manifest,
+# and since R21-2 a lint whose scan read no file at all. That is neither a
+# finding nor this hook breaking - it is the guard declining to judge - so it
+# is reported by name as skipped, in the guard's own words, and can never be
+# RED. Before R21-2 the lints printed OK over an empty scan, and this gate
+# said "swallow_lint OK" about a tree with no Python in it.
+LINT_CODES = {0: H.GREEN, 1: H.RED, 2: H.SKIPPED}
 
 
 def _staged_paths(cwd: str, command: str) -> tuple[list[str], list[str]]:
@@ -179,7 +185,16 @@ def gate(payload: dict) -> None:
         if argv is None:
             skips[name] = why
             continue
-        runs.append(H.run_guard(name, argv, root, LINT_CODES))
+        run = H.run_guard(name, argv, root, LINT_CODES)
+        if run.status == H.SKIPPED:
+            # The guard ran and declined to judge (exit 2). Its last line is
+            # the reason - "nothing was scanned: ...", an unreadable baseline
+            # - and the reason is the guard's to give, not this hook's.
+            said = next((line.strip() for line in reversed(run.detail.splitlines())
+                         if line.strip()), "exit 2 with no reason printed")
+            skips[name] = f"could not check: {said}"
+            continue
+        runs.append(run)
 
     tree = [f"Measured the working tree at {root}, not the index."]
     if disagreeing:
@@ -268,7 +283,10 @@ def selfcheck() -> bool:
               f"{unknown.status}, not an instrument failure. An unrecognised exit "
               "code must never become a verdict.", file=sys.stderr)
         ok = False
-    for code, want in ((0, H.GREEN), (1, H.RED)):
+    # Exit 2 is a guard saying it could not check (R21-2). It must land in
+    # SKIPPED: GREEN would be the empty-scan OK this round removed, and RED
+    # would take a commit hostage over a tree with nothing to read.
+    for code, want in ((0, H.GREEN), (1, H.RED), (2, H.SKIPPED)):
         r = H.run_guard("planted", [sys.executable, "-c", f"raise SystemExit({code})"],
                         Path.cwd(), LINT_CODES)
         if r.status != want:
@@ -278,7 +296,7 @@ def selfcheck() -> bool:
 
     if ok:
         print("[precommit-gate] selfcheck OK: commit classifier (12 cases), "
-              "-a detection (4), exit-code partition (3).")
+              "-a detection (4), exit-code partition (4).")
     return ok
 
 

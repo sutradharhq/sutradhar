@@ -223,14 +223,21 @@ Three narrower cases are covered by the same rule:
 - A guard that exceeds its per-guard timeout is reported as timed out, and
   allows. The agent is told the guard was killed — never that the code
   passed.
-- A guard that exits on a code outside its documented partition (the
-  partition is the one `mcp_server.py` already established, quoted below)
-  is an instrument failure. An unrecognised exit code is not a verdict.
+- A guard that exits on a code outside its documented partition (quoted
+  below) is an instrument failure. An unrecognised exit code is not a
+  verdict.
+- A guard that exits 2 has said the check could not run - an unknown flag,
+  an unreadable baseline or manifest, and since R21-2 a lint whose scan read
+  no file at all. The gate reports it as **skipped, in the guard's own
+  words**, and allows. It is not RED, and it is not the hook's failure
+  either: nothing in the hook broke. (The MCP server, where the caller chose
+  the arguments, still returns it as an error; both say no verdict was
+  reached.)
 
-| Guard | Result exit codes | Instrument failure |
-|---|---|---|
-| `verify_guard` | `0` VERIFIED, `1` DECORATION, `2` INCONCLUSIVE | anything else |
-| `swallow_lint`, `interpolation_lint`, `rounds` | `0` OK, `1` FINDINGS | `2` (usage) and anything else |
+| Guard | Result exit codes | Skipped | Instrument failure |
+|---|---|---|---|
+| `verify_guard` (the `Stop` hook) | `0` VERIFIED, `1` DECORATION, `2` INCONCLUSIVE | - | anything else |
+| `swallow_lint`, `interpolation_lint`, `framework_shape`, `ownership_lint`, `rounds` | `0` OK, `1` FINDINGS | `2`, the guard's reason quoted | anything else |
 
 ## Cardinalities and budgets <!-- 1.1 -->
 

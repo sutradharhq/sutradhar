@@ -134,7 +134,7 @@ else:
 |---|---|---|
 | `verify_guard` | `0` VERIFIED, `1` DECORATION, **`2` INCONCLUSIVE** | anything else |
 | `obsgate_*` | `0` OK, `1` UNWITNESSED, `3` INCONCLUSIVE, `4` FROZEN | **`2`** and anything else |
-| the other six | `0` OK, `1` FINDINGS | **`2`** (unknown flag / bad path) and anything else |
+| the other six | `0` OK, `1` FINDINGS | **`2`** (unknown flag / bad path / a lint that found no file to read - the guard's own sentence leads the error, R21-2) and anything else |
 
 `verify_guard` is the exception that proves the rule: its exit 2 is
 `INCONCLUSIVE`, a deliberate tri-state verdict meaning *"I could not tell"*,

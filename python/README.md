@@ -29,6 +29,9 @@ you want as living documentation.
 3. **Selfcheck**: the detector is run against a planted known-bad case in
    CI. A guard that cannot be shown to fail is decoration, and a detector
    silently edited into vacuity is the failure mode nobody tests for.
+4. **Refusal**: a lint whose scan read no file exits 2 and says nothing was
+   scanned, naming the paths. "Could not measure" is never printed as OK
+   (doctrine 2.9).
 
 Run the toolkit's own tests:
 

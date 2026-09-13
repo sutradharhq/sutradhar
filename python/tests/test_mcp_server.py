@@ -284,6 +284,29 @@ def test_another_guards_exit_2_arrives_as_an_instrument_failure(server_in_tmp, t
     assert res["error"]["data"]["exit_code"] == 2
 
 
+def test_a_lint_that_scanned_nothing_says_so_instead_of_blaming_the_server(
+        server, tmp_path):
+    """R21-2 across the transport. A path holding no Python file used to come
+    back as a verdict of OK. It is now the guard's exit 2 - still no verdict,
+    so still an error - and the error leads with the guard's own sentence.
+    "The guard crashed or this server is out of date" would send the reader
+    after the server when the fix is the path they passed (6.8)."""
+    empty = tmp_path / "no-python"
+    empty.mkdir()
+    (empty / "README.md").write_text("docs only\n")
+    res = server.call_tool("swallow_lint", {
+        "paths": [str(empty)], "baseline": str(tmp_path / "none.json"),
+        "repo": str(REPO_ROOT)})
+    assert "result" not in res, (
+        f"a lint that read no file returned the verdict "
+        f"{res.get('result', {}).get('structuredContent', {}).get('verdict')!r}")
+    error = res["error"]
+    assert error["data"]["exit_code"] == 2
+    assert "nothing was scanned" in error["message"], error["message"]
+    assert "nothing was scanned" in error["data"]["guard_said"]
+    assert "crashed" not in error["message"], error["message"]
+
+
 # ── protocol: both eras ─────────────────────────────────────────────────────
 
 def test_modern_discover_needs_no_handshake(server):

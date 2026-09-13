@@ -7,6 +7,24 @@ upgrade by diffing against the tag they took.
 
 ## Unreleased
 
+**Three lints no longer say OK when they read nothing** (round 21, R21-2).
+
+- `swallow_lint`, `interpolation_lint` and `conflated_degrade_lint`
+  printed `OK (0 files ...)` and exited 0 when the paths they were given
+  held no Python file - including the `src/` the first two assume when
+  given no path. They now exit 2, the code every guard here already uses
+  for "the check could not run", with a line naming each path and why it
+  held nothing. `--update-baseline` refuses the same way and writes no file.
+- **This can turn a CI step red, and that step was checking nothing.** If
+  your `guards.yml` points one of these at a directory with no `.py` file -
+  most often the template's `src/` in a repository that keeps its code
+  elsewhere - change the path to your source, or delete the three steps if
+  the repository has no Python.
+- The plugin's pre-commit gate reports a guard's exit 2 as skipped, in the
+  guard's own words: never RED, and no longer the hook's own failure. The
+  MCP server's error for an exit 2 now leads with the guard's sentence
+  rather than "the guard crashed".
+
 ## v0.5.2 - 2026-09-13
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP

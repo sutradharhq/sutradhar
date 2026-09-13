@@ -260,6 +260,36 @@ def test_no_path_is_refused_rather_than_assumed(tmp_path, capsys):
     assert "nothing was scanned" in capsys.readouterr().err
 
 
+def test_a_named_directory_with_no_python_is_refused_too(tmp_path, capsys):
+    """R21-2. The guard refused the default directory nobody named and then
+    printed `OK (0 file(s), ...)` for a named one that held nothing - the
+    same lie, one argument later."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "README.md").write_text("docs only\n")
+    base = tmp_path / "b.json"
+    rc = cdl.main([str(src), "--baseline", str(base)])
+    said = capsys.readouterr()
+    assert rc == 2, said
+    assert "nothing was scanned" in said.err and str(src) in said.err
+    assert "OK" not in said.out + said.err
+
+
+def test_a_floor_is_not_recorded_over_nothing(tmp_path):
+    base = tmp_path / "b.json"
+    assert cdl.main([str(tmp_path), "--baseline", str(base),
+                     "--update-baseline"]) == 2
+    assert not base.exists()
+
+
+def test_a_tree_holding_only_vendor_files_says_how_to_scan_them(tmp_path, capsys):
+    vendor = tmp_path / ".venv" / "pkg"
+    vendor.mkdir(parents=True)
+    (vendor / "dep.py").write_text(CONFLATED)
+    assert cdl.main([str(tmp_path), "--baseline", str(tmp_path / "b.json")]) == 2
+    assert "--include-vendor" in capsys.readouterr().err
+
+
 def test_a_blinded_detector_fails_the_cli(tmp_path, monkeypatch):
     """The wiring test: the path from "the detector went vacuous" to "CI goes
     red" is itself under test. A clean tree is green; the same clean tree

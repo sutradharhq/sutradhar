@@ -1005,12 +1005,30 @@ def run_tool(name: str, arguments: dict) -> dict:
         # An exit code outside the declared partition means the guard did
         # something this server does not know how to read - a crash, a signal,
         # a version skew. Reporting it as a verdict would be inventing one.
+        #
+        # Exit 2 is the one such code a guard means on purpose: "the check
+        # could not run", with its own sentence saying why - since R21-2 that
+        # includes a lint pointed at paths holding no Python file. Calling
+        # that a crash sends the reader after this server when the fix is the
+        # path they passed (6.8), so the guard's sentence leads the message.
+        # stderr first: a guard's refusal goes there, and its stdout ends
+        # with the selfcheck line it printed before scanning.
+        said = next((line.strip() for stream in (proc.stderr, proc.stdout)
+                     for line in reversed((stream or "").splitlines())
+                     if line.strip()), "")
+        if proc.returncode == 2 and said:
+            why = (f"{name} exited 2, which is how a guard says the check could "
+                   f"not run, and it said why: {said} No verdict was reached - "
+                   f"this is not a pass.")
+        else:
+            why = (f"{name} exited {proc.returncode}, which is not one of its "
+                   f"known verdict codes "
+                   f"({', '.join(str(c) for c in sorted(spec['result_codes']))}). "
+                   f"The guard crashed or this server is out of date with it; "
+                   f"either way no verdict was reached.")
         raise InstrumentError(
-            f"{name} exited {proc.returncode}, which is not one of its known "
-            f"verdict codes ({', '.join(str(c) for c in sorted(spec['result_codes']))}). "
-            f"The guard crashed or this server is out of date with it; either "
-            f"way no verdict was reached.",
-            tool=name, exit_code=proc.returncode,
+            why,
+            tool=name, exit_code=proc.returncode, guard_said=said,
             stdout=out, stderr=err,
             command=" ".join(shlex.quote(a) for a in argv),
         )

@@ -27,6 +27,14 @@ Usage:
     python swallow_lint.py src/ --update-baseline   # record today's floor
     python swallow_lint.py --selfcheck              # prove the detector works
 
+Exit 0 no swallow beyond the baseline, 1 a new swallow, 2 the check could
+not run: an unknown flag, or paths that hold no Python file at all. 2 is not
+a pass. A scan that read nothing used to print ``OK (0 files ...)`` and exit
+0, so a CI step pointed at a directory with no Python in it - most often the
+template's ``src/`` in a tree that keeps its code somewhere else - reported
+green on every run and had checked nothing (R21-2). That is the lie this
+guard exists to catch, told by the guard about itself.
+
 The detector is AST-based: it sees bare ``except:``, tuple handlers that
 include Exception, and bodies of any length. Intentional swallows (there
 are legitimate ones: "metrics must never break the request") stay in the
@@ -181,18 +189,72 @@ def g():
 '''
 
 
+#: `main` runs the selfcheck before it scans, and the selfcheck drives `main`
+#: to prove the CLI refuses an empty scan - two correct decisions that are
+#: mutual recursion without this flag (R20-1, where `ownership_lint`'s first
+#: run was a RecursionError rather than a verdict).
+_IN_SELFCHECK = False
+
+
 def selfcheck() -> bool:
+    global _IN_SELFCHECK
+    if _IN_SELFCHECK:
+        return True
+    _IN_SELFCHECK = True
+    try:
+        return _selfcheck_body()
+    finally:
+        _IN_SELFCHECK = False
+
+
+def _selfcheck_body() -> bool:
+    import contextlib
+    import io
+    import tempfile
+
+    problems: list[str] = []
     bad = check_source(_KNOWN_BAD)
     good = check_source(_KNOWN_GOOD)
-    ok = len(bad) == 2 and len(good) == 0
-    if not ok:
-        print(f"[swallow-lint] SELFCHECK FAILED: bad={bad} good={good}")
-    else:
+    if not (len(bad) == 2 and len(good) == 0):
+        problems.append(f"bad={bad} good={good}")
+
+    # Through the CLI, in a pair (6.7): a directory with no Python file must
+    # be refused with 2 AND say so, and one clean file must pass, or the
+    # refusal could be refusing everything and still look right.
+    def cli(args: list[str]) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(args)
+        return code, out.getvalue() + err.getvalue()
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "README.md").write_text("no python here\n", encoding="utf-8")
+        args = [str(root), "--baseline", str(root / "none.json")]
+        rc, said = cli(args)
+        if rc != 2 or "nothing was scanned" not in said:
+            problems.append(
+                f"a directory with no Python file exited {rc}, not 2 with a "
+                f"'nothing was scanned' line; an OK over zero files is a pass "
+                f"for a check that never ran: {said!r}"
+            )
+        (root / "clean.py").write_text("x = 1\n", encoding="utf-8")
+        rc, said = cli(args)
+        if rc != 0:
+            problems.append(
+                f"one clean file exited {rc}, not 0; the empty-scan refusal "
+                f"would be refusing everything: {said!r}"
+            )
+
+    for p in problems:
+        print(f"[swallow-lint] SELFCHECK FAILED: {p}")
+    if not problems:
         print(
             "[swallow-lint] selfcheck ok: silent swallow caught, handled "
-            "exception passed"
+            "exception passed, a directory with no Python file refused with "
+            "exit 2, one clean file passed"
         )
-    return ok
+    return not problems
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
@@ -259,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             i += 1
         else:
             paths.append(Path(a)); i += 1
+    defaulted = not paths
     if not paths:
         paths = [Path("src")]
 
@@ -285,6 +348,29 @@ def main(argv: list[str] | None = None) -> int:
             f"directories ({', '.join(sorted(VENDOR_DIRS)[:4])}, ...); "
             f"pass --include-vendor to scan them"
         )
+
+    # Zero files read is "could not measure", never "no new swallow" (2.9),
+    # and that holds for --update-baseline too: a floor recorded over
+    # nothing is a floor of nothing. Refused before either branch, with the
+    # paths named and the sentence that says what to change (R21-2).
+    if not py_files:
+        states = ", ".join(
+            f"{p} ({'does not exist' if not p.exists() else 'is not a .py file' if p.is_file() else 'holds no .py file'})"
+            for p in paths
+        )
+        print(
+            f"[swallow-lint] nothing was scanned: {states}"
+            + ("; no path was given, so src/ was assumed" if defaulted else "")
+            + (f"; the {skipped_vendor} .py file(s) found are all under vendor "
+               f"directories, and --include-vendor scans them"
+               if skipped_vendor else "")
+            + ". This is not a pass (2.9). Name the directory that holds your "
+            "Python source; a repository with no Python has nothing for this "
+            "guard to read, so remove its CI step rather than keep a check "
+            "that cannot run.",
+            file=sys.stderr,
+        )
+        return 2
 
     counts: dict[str, int] = {}
     lines_by_file: dict[str, list[int]] = {}

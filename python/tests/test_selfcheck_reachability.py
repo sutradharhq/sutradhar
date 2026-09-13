@@ -59,7 +59,8 @@ MODULES = sorted(info.name for info in pkgutil.iter_modules(sutradhar_guards.__p
 FORMS = ("-m", "path")
 
 
-def _run(module: str, *args: str, form: str = "-m") -> subprocess.CompletedProcess:
+def _run(module: str, *args: str, form: str = "-m",
+         cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     if form == "-m":
         # PYTHONPATH is set explicitly rather than inherited. Running with
@@ -193,3 +194,86 @@ def test_every_shebang_is_on_line_one():
         f"{misplaced}. Put `#!/usr/bin/env python3` first and the license "
         f"header under it, then run `python3 plugin/sync_guards.py`."
     )
+
+
+# ── nothing to read is not a pass ───────────────────────────────────────────
+#
+# R21-2. Three lints printed OK and exited 0 over a directory holding no
+# Python file, so a CI step aimed at the wrong path was green on every run and
+# had read nothing. The ratchet below does not keep a list of "the modules
+# that scan a directory" - a list is what goes stale. It hands EVERY module
+# only an empty directory, and runs it from inside that directory so no
+# default path can find this repository instead. A module that takes no
+# directory refuses the argument; one that does must refuse the empty scan.
+# Either way, exit 0 or a line saying OK is the lie.
+#
+# Empty, and not "a README and no code": the first draft planted a README.md,
+# and framework_shape - whose surface includes a top-level README - read it
+# and correctly said OK over one file. A fixture a guard legitimately reads is
+# not nothing to read. The no-Python-repository case lives in each lint's own
+# tests, where "nothing" can be defined per guard.
+
+#: Modules that exit 0 over a directory with nothing in it ON PURPOSE, each
+#: with the line it prints instead of OK and the reason. The exemption test
+#: fails the day an entry stops being true, so this cannot quietly become an
+#: ignore list.
+EMPTY_SCAN_EXEMPT = {
+    "budget": (
+        "no budgets declared under",
+        "a design-notes directory that declares no budget has promised "
+        "nothing, and bootstrap.sh ships one holding only TEMPLATE.md; "
+        "refusing it would open every fresh adopter's CI red over a promise "
+        "they have not made. It names the directory and says nothing was "
+        "declared, and it never prints OK.",
+    ),
+}
+
+
+def _says_ok(text: str) -> bool:
+    """True when OK appears as a word. `selfcheck ok` is lowercase and is the
+    guard proving itself, not a verdict on the directory."""
+    return any(token.strip("()[]{}:;,.!-'\"") == "OK" for token in text.split())
+
+
+def _nothing_to_read(tmp_path: Path) -> Path:
+    tree = tmp_path / "nothing-to-read"
+    tree.mkdir()
+    assert not any(tree.iterdir()), "the fixture must be empty to mean nothing"
+    return tree
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize(
+    "module", [m for m in MODULES if m not in EMPTY_SCAN_EXEMPT])
+def test_a_directory_with_nothing_to_read_is_never_ok(module: str, form: str,
+                                                      tmp_path: Path):
+    tree = _nothing_to_read(tmp_path)
+    proc = _run(module, str(tree), form=form, cwd=tree)
+    said = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        f"sutradhar_guards.{module} ({form} form) exited 0 when handed only a "
+        f"directory with nothing in it to read. That is a pass for a check "
+        f"that never ran (2.9): refuse it with 2 and say nothing was scanned, "
+        f"or add it to EMPTY_SCAN_EXEMPT with the line it prints and why.\n"
+        f"{said}"
+    )
+    assert not _says_ok(said), (
+        f"sutradhar_guards.{module} ({form} form) printed OK over a directory "
+        f"with nothing in it to read:\n{said}"
+    )
+
+
+@pytest.mark.parametrize("module", sorted(EMPTY_SCAN_EXEMPT))
+def test_every_empty_scan_exemption_is_still_true(module: str, tmp_path: Path):
+    line, reason = EMPTY_SCAN_EXEMPT[module]
+    assert module in MODULES, f"{module} is exempt and no longer exists"
+    assert len(reason) > 80, f"{module}'s exemption carries no real reason"
+    tree = _nothing_to_read(tmp_path)
+    proc = _run(module, str(tree), form="path", cwd=tree)
+    said = proc.stdout + proc.stderr
+    assert proc.returncode == 0, (
+        f"{module} now refuses an empty directory (exit {proc.returncode}); "
+        f"delete its EMPTY_SCAN_EXEMPT entry so the ratchet holds it.\n{said}"
+    )
+    assert line in said, f"{module} exits 0 without saying {line!r}:\n{said}"
+    assert not _says_ok(said), f"{module} printed OK over nothing:\n{said}"

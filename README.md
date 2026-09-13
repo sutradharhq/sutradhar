@@ -278,6 +278,9 @@ Then:
    python scripts/swallow_lint.py src/                     # gate: only shrinks from here
    python scripts/interpolation_lint.py src/ --keywords sql
    ```
+   Point them at the directory your Python is in. A path holding no `.py`
+   file is refused with exit 2 and a line saying nothing was scanned; it is
+   never reported as OK.
 3. **Turn on the UI guards** (any Cypress project): import
    `cypress/support/uiGuards.ts`, add the route sweep, and give every new
    interactive control an `expectEffect` assertion.

@@ -281,6 +281,25 @@ def test_measuring_nothing_is_not_reported_as_green(repo: Path):
     assert "measured NOTHING" in reason(proc)
 
 
+def test_a_lint_that_scanned_nothing_is_skipped_never_ok_never_red(repo: Path):
+    """R21-2 at the commit. A repository with a swallow baseline and no Python
+    file in it: `swallow_lint` runs over the tree and reads nothing. It used
+    to exit 0, and this gate said "swallow_lint OK" about code that does not
+    exist. It now exits 2, which must not block a commit - the gate never
+    takes one hostage - and must not be called the hook's own failure
+    either, because nothing here broke. Skipped, in the guard's own words."""
+    with_baseline(repo)
+    stage(repo, "notes.md", "# not code\n")
+    proc = run_hook(GATE, pre_tool_use(repo))
+    assert proc.returncode == 0, proc.stderr
+    assert decision(proc) is None, proc.stdout
+    body = reason(proc)
+    assert "swallow_lint skipped (could not check:" in body, body
+    assert "nothing was scanned" in body, body
+    assert "swallow_lint OK" not in body, body
+    assert "swallow_lint RED" not in body and "INSTRUMENT-FAILURE" not in body, body
+
+
 def test_gate_names_the_tree_it_measured(repo: Path):
     """Backflow B-15: a gate must prove it gated the tree you are pushing.
     These guards read the working tree; the commit takes the index. When

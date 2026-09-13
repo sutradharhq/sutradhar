@@ -57,6 +57,11 @@ Usage:
     python interpolation_lint.py src/ --keywords sql
     python interpolation_lint.py src/ --keywords sparql --safe-call my_escape
     python interpolation_lint.py --selfcheck
+
+Exit 0 no risky interpolation, 1 a finding, 2 the check could not run: an
+unknown flag, or paths that hold no Python file at all. 2 is not a pass. A
+scan that read nothing used to print ``OK (0 files checked)`` and exit 0,
+which is a green injection check over a tree nobody read (R21-2).
 """
 from __future__ import annotations
 
@@ -356,6 +361,12 @@ def messages(pct, name, page, table):
 '''
 
 
+#: `main` runs the selfcheck before it scans, and the selfcheck drives `main`
+#: to prove the CLI refuses an empty scan - two correct decisions that are
+#: mutual recursion without this flag (R20-1).
+_IN_SELFCHECK = False
+
+
 def selfcheck() -> bool:
     """Known-bad and known-good for each of the three spellings (6.7).
 
@@ -363,8 +374,50 @@ def selfcheck() -> bool:
     detector that flagged every `%` would be deleted from CI inside a week,
     and every hole it could have caught leaves with it.
     """
+    global _IN_SELFCHECK
+    if _IN_SELFCHECK:
+        return True
+    _IN_SELFCHECK = True
+    try:
+        return _selfcheck_body()
+    finally:
+        _IN_SELFCHECK = False
+
+
+def _selfcheck_body() -> bool:
+    import contextlib
+    import io
+    import tempfile
+
     kws = KEYWORD_PRESETS["sql"]
     problems: list = []
+
+    # Through the CLI, in a pair: a directory with no Python file is refused
+    # with 2 and says so, and one clean file passes - otherwise the refusal
+    # could be refusing everything and still look right (R21-2).
+    def cli(args: list) -> tuple:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(args)
+        return code, out.getvalue() + err.getvalue()
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "README.md").write_text("no python here\n", encoding="utf-8")
+        rc, said = cli([str(root), "--keywords", "sql"])
+        if rc != 2 or "nothing was scanned" not in said:
+            problems.append(
+                f"a directory with no Python file exited {rc}, not 2 with a "
+                f"'nothing was scanned' line; an OK over zero files is a pass "
+                f"for a check that never ran: {said!r}"
+            )
+        (root / "clean.py").write_text("x = 1\n", encoding="utf-8")
+        rc, said = cli([str(root), "--keywords", "sql"])
+        if rc != 0:
+            problems.append(
+                f"one clean file exited {rc}, not 0; the empty-scan refusal "
+                f"would be refusing everything: {said!r}"
+            )
 
     for label, source, want in (
         ("f-string into a quoted query position", _KNOWN_BAD, 1),
@@ -399,7 +452,9 @@ def selfcheck() -> bool:
             "[interpolation-lint] selfcheck ok: interpolated query caught in "
             "all three spellings (f-string, `%`, `.format()`) with the "
             "argument named, and left alone when escaped at the site, in an "
-            "unquoted position, or in a string carrying no query keyword"
+            "unquoted position, or in a string carrying no query keyword; a "
+            "directory with no Python file refused with exit 2, one clean "
+            "file passed"
         )
     return not problems
 
@@ -445,6 +500,7 @@ def main(argv: list[str] | None = None) -> int:
             paths.append(Path(a)); i += 1
     if not keywords:
         keywords = KEYWORD_PRESETS["sql"] | KEYWORD_PRESETS["sparql"]
+    defaulted = not paths
     if not paths:
         paths = [Path("src")]
 
@@ -459,6 +515,25 @@ def main(argv: list[str] | None = None) -> int:
             py_files.extend(
                 f for f in root.rglob("*.py") if "__pycache__" not in str(f)
             )
+
+    # Zero files read is "could not measure", never "no injection risk"
+    # (2.9). Refused with the paths named and the sentence that says what to
+    # change, on the code every guard here uses for "could not run" (R21-2).
+    if not py_files:
+        states = ", ".join(
+            f"{p} ({'does not exist' if not p.exists() else 'is not a .py file' if p.is_file() else 'holds no .py file'})"
+            for p in paths
+        )
+        print(
+            f"[interpolation-lint] nothing was scanned: {states}"
+            + ("; no path was given, so src/ was assumed" if defaulted else "")
+            + ". This is not a pass (2.9). Name the directory that holds your "
+            "Python source; a repository with no Python has nothing for this "
+            "guard to read, so remove its CI step rather than keep a check "
+            "that cannot run.",
+            file=sys.stderr,
+        )
+        return 2
 
     issues: list[tuple[Path, int, str]] = []
     for f in py_files:

@@ -228,6 +228,45 @@ def test_is_vendor_judges_relative_to_the_named_root(tmp_path):
     assert _is_vendor(f, tmp_path / ".venv") is False
 
 
+# ── an empty scan is not a pass (R21-2) ──────────────────────────────────────
+# `OK (0 files, ...)` and exit 0 was the answer for paths holding no Python,
+# so a CI step aimed at the wrong directory reported green on every run and
+# had read nothing. Exit 2 is this toolkit's "the check could not run".
+
+
+def test_a_directory_with_no_python_is_refused_and_named(tmp_path, capsys):
+    (tmp_path / "README.md").write_text("docs only\n")
+    rc = main([str(tmp_path), "--baseline", str(tmp_path / "none.json")])
+    said = capsys.readouterr()
+    assert rc == 2, said
+    assert "nothing was scanned" in said.err and str(tmp_path) in said.err
+    assert "holds no .py file" in said.err
+    assert "OK" not in said.out + said.err
+
+
+def test_no_argument_and_no_src_names_the_default_it_assumed(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 2
+    err = capsys.readouterr().err
+    assert "src (does not exist)" in err and "src/ was assumed" in err
+
+
+def test_a_floor_is_not_recorded_over_nothing(tmp_path):
+    """A baseline written over zero files is a floor of nothing, and the next
+    run would gate against it as if it meant something."""
+    base = tmp_path / "b.json"
+    assert main([str(tmp_path), "--update-baseline", "--baseline", str(base)]) == 2
+    assert not base.exists()
+
+
+def test_a_tree_holding_only_vendor_files_says_how_to_scan_them(tmp_path, capsys):
+    vendor = tmp_path / ".venv" / "pkg"
+    vendor.mkdir(parents=True)
+    (vendor / "dep.py").write_text("x = 1\n")
+    assert main([str(tmp_path), "--baseline", str(tmp_path / "none.json")]) == 2
+    assert "--include-vendor" in capsys.readouterr().err
+
+
 def test_vendor_list_excludes_dirs_that_are_often_real_source():
     """A too-greedy exclusion silently stops scanning the adopter's code -
     the failure mode this whole change is trying to avoid, inverted. `build`,

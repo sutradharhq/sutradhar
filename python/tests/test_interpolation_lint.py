@@ -6,11 +6,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sutradhar_guards.interpolation_lint import (
     KEYWORD_PRESETS,
     check_source,
+    main,
     selfcheck,
 )
 
 SQL = KEYWORD_PRESETS["sql"]
 SPARQL = KEYWORD_PRESETS["sparql"]
+
+
+# ── an empty scan is not a pass (R21-2) ──────────────────────────────────────
+
+def test_a_directory_with_no_python_is_refused_and_named(tmp_path, capsys):
+    """`OK (0 files checked)` and exit 0 was a green injection check over a
+    tree nobody read. Exit 2 is this toolkit's "the check could not run"."""
+    (tmp_path / "README.md").write_text("docs only\n")
+    rc = main([str(tmp_path), "--keywords", "sql"])
+    said = capsys.readouterr()
+    assert rc == 2, said
+    assert "nothing was scanned" in said.err and str(tmp_path) in said.err
+    assert "OK" not in said.out + said.err
+
+
+def test_no_argument_and_no_src_names_the_default_it_assumed(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 2
+    err = capsys.readouterr().err
+    assert "src (does not exist)" in err and "src/ was assumed" in err
 
 
 def test_flags_bare_name_in_quoted_position():

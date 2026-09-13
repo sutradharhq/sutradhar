@@ -34,6 +34,12 @@ jobs:
 
       # Each lint runs its selfcheck internally before scanning; a detector
       # that cannot flag its planted bad case exits nonzero here.
+      #
+      # These three read Python source under `src/`. Pointed at a path that
+      # holds no .py file they exit 2 with "nothing was scanned" rather than
+      # print OK over a tree nothing read (2.9). If one is red on your first
+      # push for that reason: change `src/` to the directory your Python
+      # lives in, or delete all three steps in a repository with no Python.
       - name: Silent-swallow ratchet
         run: python scripts/swallow_lint.py src/ --baseline scripts/swallow_baseline.json
 
