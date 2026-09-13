@@ -106,9 +106,7 @@ The full statement, including what we found in our own audit and when, is in
   that can wedge a session is not a harness.
 - **It never reports a guard that did not run as green.** No
   `swallow_baseline.json`, no `docs/rounds/`, no staged Python: each is
-  named as skipped. So is a guard that ran and could not check - exit 2,
-  such as a lint that found no Python file to read - in its own words. A
-  commit where nothing was applicable says so out loud.
+  named as skipped. A commit where nothing was applicable says so out loud.
 - **It says which tree it read.** The guards read the working tree; `git
   commit` commits the index. When they differ, the message names the paths
   where they disagree. The gate never stashes, checks out, or writes
