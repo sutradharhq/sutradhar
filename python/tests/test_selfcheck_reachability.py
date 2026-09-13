@@ -22,6 +22,15 @@ Two assertions per module, and the SECOND is the load-bearing one:
 
 A class ratchet over `pkgutil.iter_modules`, not a point test per module
 (doctrine 2.1), so any module added later is covered the day it lands.
+
+Every assertion runs in BOTH invocation forms (R21-4). `python -m
+sutradhar_guards.<module>` is how this repository's tests reach a module;
+`python3 path/to/<module>.py` is how an adopter reaches one, because
+`bootstrap.sh` copies files, not a package. The two forms load a module
+differently - the second puts the file's own directory on `sys.path` and
+nothing else - so a module that only works when `sutradhar_guards` is
+importable passes one form and fails the other. Both worked when this was
+written; only one was pinned.
 """
 import os
 import pkgutil
@@ -44,18 +53,35 @@ UNKNOWN_FLAG = "--zzz-not-a-real-flag"
 MODULES = sorted(info.name for info in pkgutil.iter_modules(sutradhar_guards.__path__))
 
 
-def _run(module: str, *args: str) -> subprocess.CompletedProcess:
-    # PYTHONPATH is set explicitly rather than inherited. Running with
-    # cwd=REPO_ROOT means the package is not importable from the working
-    # directory, so a test that relied on the caller's exported PYTHONPATH
-    # passed locally and failed in CI - the ambient environment was doing
-    # work the test claimed to do itself.
+#: The two ways a module is reached. `-m` is the package form this
+#: repository's own tests and CI use; `path` is the copy-in form an adopter
+#: uses after `bootstrap.sh`, run with the package deliberately NOT importable.
+FORMS = ("-m", "path")
+
+
+def _run(module: str, *args: str, form: str = "-m") -> subprocess.CompletedProcess:
     env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(PKG_PARENT), env["PYTHONPATH"]] if env.get("PYTHONPATH") else [str(PKG_PARENT)]
-    )
+    if form == "-m":
+        # PYTHONPATH is set explicitly rather than inherited. Running with
+        # cwd=REPO_ROOT means the package is not importable from the working
+        # directory, so a test that relied on the caller's exported PYTHONPATH
+        # passed locally and failed in CI - the ambient environment was doing
+        # work the test claimed to do itself.
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(PKG_PARENT), env["PYTHONPATH"]] if env.get("PYTHONPATH") else [str(PKG_PARENT)]
+        )
+        argv = [sys.executable, "-m", f"sutradhar_guards.{module}", *args]
+    elif form == "path":
+        # The adopter's condition: a file, run by path, with nothing on the
+        # path but its own directory. An inherited PYTHONPATH that happens to
+        # reach `python/` would let a package-only import pass here and fail
+        # in their tree, so it is removed rather than trusted.
+        env.pop("PYTHONPATH", None)
+        argv = [sys.executable, str(PKG_PARENT / "sutradhar_guards" / f"{module}.py"), *args]
+    else:  # pragma: no cover - a typo in a parametrize list
+        raise ValueError(f"unknown invocation form {form!r}; expected one of {FORMS}")
     return subprocess.run(
-        [sys.executable, "-m", f"sutradhar_guards.{module}", *args],
+        argv,
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -70,46 +96,49 @@ def test_the_package_actually_has_modules():
     assert len(MODULES) >= 8, f"expected the full tool set, found {MODULES}"
 
 
+@pytest.mark.parametrize("form", FORMS)
 @pytest.mark.parametrize("module", MODULES)
-def test_selfcheck_runs_and_says_so(module: str):
-    proc = _run(module, "--selfcheck")
+def test_selfcheck_runs_and_says_so(module: str, form: str):
+    proc = _run(module, "--selfcheck", form=form)
     assert proc.returncode == 0, (
-        f"sutradhar_guards.{module} --selfcheck exited {proc.returncode}\n"
-        f"stdout: {proc.stdout}\nstderr: {proc.stderr}"
+        f"sutradhar_guards.{module} --selfcheck ({form} form) exited "
+        f"{proc.returncode}\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
     )
     assert module.replace("_", "-") in proc.stdout or module in proc.stdout, (
-        f"sutradhar_guards.{module} --selfcheck exited 0 but printed nothing "
-        f"naming itself. A silent pass cannot be told apart from a check that "
-        f"never ran.\nstdout: {proc.stdout!r}"
+        f"sutradhar_guards.{module} --selfcheck ({form} form) exited 0 but "
+        f"printed nothing naming itself. A silent pass cannot be told apart "
+        f"from a check that never ran.\nstdout: {proc.stdout!r}"
     )
 
 
+@pytest.mark.parametrize("form", FORMS)
 @pytest.mark.parametrize("module", MODULES)
-def test_unknown_flag_is_rejected(module: str):
+def test_unknown_flag_is_rejected(module: str, form: str):
     """The one that makes exit 0 mean something.
 
     If an unknown flag exits 0, then so does `--selfcheck`, for the same
     reason: nothing parsed it. Mutation-verify this by deleting a module's
     `__main__` block - this test must go red for that module.
     """
-    proc = _run(module, UNKNOWN_FLAG)
+    proc = _run(module, UNKNOWN_FLAG, form=form)
     assert proc.returncode != 0, (
-        f"sutradhar_guards.{module} {UNKNOWN_FLAG} exited 0. An unrecognised "
-        f"flag was ignored, which means `--selfcheck` proves only that the "
-        f"module imported - not that any check ran.\n"
+        f"sutradhar_guards.{module} {UNKNOWN_FLAG} ({form} form) exited 0. An "
+        f"unrecognised flag was ignored, which means `--selfcheck` proves only "
+        f"that the module imported - not that any check ran.\n"
         f"stdout: {proc.stdout!r}\nstderr: {proc.stderr!r}"
     )
 
 
+@pytest.mark.parametrize("form", FORMS)
 @pytest.mark.parametrize("module", MODULES)
-def test_no_import_warnings_on_cli_invocation(module: str):
+def test_no_import_warnings_on_cli_invocation(module: str, form: str):
     """`__init__` eagerly importing a submodule makes `python -m pkg.mod`
     emit a RuntimeWarning about unpredictable behaviour on every run. Noise
     on a guard's own stderr trains people to stop reading stderr."""
-    proc = _run(module, "--selfcheck")
+    proc = _run(module, "--selfcheck", form=form)
     assert "RuntimeWarning" not in proc.stderr, (
-        f"sutradhar_guards.{module} emits a RuntimeWarning on every CLI run:\n"
-        f"{proc.stderr}"
+        f"sutradhar_guards.{module} ({form} form) emits a RuntimeWarning on "
+        f"every CLI run:\n{proc.stderr}"
     )
 
 
