@@ -81,8 +81,14 @@ agent. Treat the tool accordingly:
   it reads **loopback** without being asked - which is where a dev stack
   answers - and refuses any other host unless `SUTRADHAR_MCP_ANY_URL=1`.
   A metadata endpoint or an internal service is otherwise one string away
-  from anything a model read in a tool result. The `obsgate` CLI is not
-  restricted; this bounds what a MODEL can reach, not what you can.
+  from anything a model read in a tool result. The host checked is the one
+  a standard URL parser reads, a URL carrying user-info (`anything@`) is
+  refused, and the URL handed to `obsgate` is rebuilt from the parts that
+  were checked, so what is fetched is what was judged. Until v0.5.2 the
+  check read the host with its own pattern, and
+  `http://localhost:1@169.254.169.254/` passed it; see the changelog. The
+  `obsgate` CLI is not restricted; this bounds what a MODEL can reach, not
+  what you can.
 
 **2. The `Stop` hook runs the `Guard-cmd:` trailer on HEAD.** When your
 agent's turn ends, the hook reads HEAD's commit message and, if it carries a

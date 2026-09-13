@@ -192,7 +192,7 @@ def test_marketplace_manifest_resolves_to_a_real_plugin():
 
 # ── the update signal ───────────────────────────────────────────────────────
 
-_RELEASE_HEADING = re.compile(r"^## v(\d+)\.(\d+)\.(\d+)\b", re.MULTILINE)
+_RELEASE_HEADING = re.compile(r"^## \[?v?(\d+)\.(\d+)\.(\d+)\]?(?=\s|$)")
 
 
 def test_no_manifest_pins_the_installed_plugin_to_a_version():
@@ -224,21 +224,48 @@ def test_every_version_string_names_the_newest_release():
     """R21-1's other half. `__version__` and the MCP server's
     `serverInfo.version` said 0.3.0 through three releases, so nothing in a
     copied guard or a running server could say which release it came from.
-    The newest `## vX.Y.Z` heading in CHANGELOG.md is where a release is
-    written down in the tree - CI checks out without tags - so both must
-    name it."""
+    The newest release heading in CHANGELOG.md is where a release is
+    written down in the tree - CI checks out without tags - so every version
+    string must name it.
+
+    R21-10, from the outside review of v0.5.2: the first draft read only
+    `## vX.Y.Z`, so a newer release spelled `## 0.6.0` or `## [0.6.0]` was
+    skipped and stale strings passed; and it never looked at CITATION.cff
+    (three releases behind) or the browser probe's own `serverInfo`. So
+    every `## ` heading must read as a release or be `Unreleased`, and all
+    four strings must agree with the newest."""
     from sutradhar_guards.mcp_server import SERVER_VERSION
 
-    text = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    releases = [tuple(int(p) for p in m) for m in _RELEASE_HEADING.findall(text)]
-    assert releases, "CHANGELOG.md has no '## vX.Y.Z' heading to compare with"
+    headings = [line for line in (REPO_ROOT / "CHANGELOG.md")
+                .read_text(encoding="utf-8").splitlines()
+                if line.startswith("## ")]
+    unread = [h for h in headings
+              if h.strip() != "## Unreleased" and not _RELEASE_HEADING.match(h)]
+    assert not unread, (
+        f"CHANGELOG headings this test cannot read as a release: {unread}. "
+        f"Skipping one would compare against an older release and pass.")
+    releases = [tuple(int(p) for p in _RELEASE_HEADING.match(h).groups())
+                for h in headings if h.strip() != "## Unreleased"]
+    assert releases, "CHANGELOG.md has no release heading to compare with"
     newest = ".".join(str(p) for p in max(releases))
-    assert sutradhar_guards.__version__ == newest, (
-        f"sutradhar_guards.__version__ is {sutradhar_guards.__version__}, "
-        f"the newest CHANGELOG release is {newest}")
-    assert SERVER_VERSION == newest, (
-        f"mcp_server.SERVER_VERSION is {SERVER_VERSION}, the newest "
-        f"CHANGELOG release is {newest}")
+
+    citation = re.search(r"^version:\s*[\"']?(\d+\.\d+\.\d+)[\"']?\s*$",
+                         (REPO_ROOT / "CITATION.cff").read_text(encoding="utf-8"),
+                         re.MULTILINE)
+    probe = re.search(
+        r'serverInfo:\s*\{\s*name:\s*"sutradhar-probe",\s*version:\s*"([^"]+)"',
+        (REPO_ROOT / "js" / "probe" / "mcp.mjs").read_text(encoding="utf-8"))
+    assert citation, "CITATION.cff has no `version:` line this test can read"
+    assert probe, "js/probe/mcp.mjs has no serverInfo version this test can read"
+    found = {
+        "sutradhar_guards.__version__": sutradhar_guards.__version__,
+        "mcp_server.SERVER_VERSION": SERVER_VERSION,
+        "CITATION.cff version": citation.group(1),
+        "js/probe/mcp.mjs serverInfo.version": probe.group(1),
+    }
+    wrong = {name: value for name, value in found.items() if value != newest}
+    assert not wrong, (
+        f"the newest CHANGELOG release is {newest}; these say otherwise: {wrong}")
 
 
 # ── the installed condition, reproduced ─────────────────────────────────────

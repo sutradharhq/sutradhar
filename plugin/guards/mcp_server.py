@@ -70,6 +70,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from pathlib import Path
 
 SERVER_NAME = "sutradhar-guards"
@@ -344,8 +345,12 @@ ANY_URL_ENV = "SUTRADHAR_MCP_ANY_URL"
 #: Hosts the inner loop actually points at, and the only ones this server
 #: will fetch without being told to. A dev stack answers on loopback; the
 #: SSRF targets that matter - a cloud metadata endpoint at 169.254.169.254,
-#: a service on another box, anything outside - do not.
-_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"})
+#: a service on another box, anything outside - do not. Compared with the
+#: host a standard URL parser reads (lowercased, brackets stripped), never
+#: with a piece of the raw string (R21-9).
+_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+_URL_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)
 
 
 def _metrics_source(a: dict) -> str:
@@ -367,23 +372,10 @@ def _metrics_source(a: dict) -> str:
     guard.
     """
     raw = _string(a, "metrics", required=True)
-    # The bracketed form FIRST: `[^/:]+` matches a bare `[` and stops at the
-    # colon, so `http://[::1]:9090` yields the host `[` and a loopback URL
-    # gets refused. Alternation order is the whole fix.
-    m = re.match(r"^([a-z][a-z0-9+.-]*)://(\[[^\]]+\]|[^/:]+)", raw, re.I)
-    if m:
+    if _URL_SCHEME.match(raw):
         if os.environ.get(ANY_URL_ENV) == "1":
             return raw
-        scheme, host = m.group(1).lower(), m.group(2).lower()
-        if scheme in ("http", "https") and host in _LOOPBACK:
-            return raw
-        raise _bad_args(
-            f"`metrics` {raw!r} points at {host!r}. This server fetches "
-            f"loopback without being asked, and nothing else on a model's "
-            f"say-so - a metadata endpoint or an internal service is one "
-            f"string away. Point it at localhost, pass a file, or set "
-            f"{ANY_URL_ENV}=1 on a machine you control. The `obsgate` CLI "
-            f"is not restricted.")
+        return _loopback_url(raw)
     target = Path(raw).expanduser()
     if os.environ.get(ANY_REPO_ENV) == "1":
         return str(target)
@@ -394,6 +386,53 @@ def _metrics_source(a: dict) -> str:
             f"`metrics` {raw} resolves to {resolved}, outside {root} - the "
             f"repository this server was started in.")
     return str(resolved)
+
+
+def _loopback_url(raw: str) -> str:
+    """The URL a model sent, reduced to the one `obsgate` will fetch - or a
+    refusal.
+
+    R21-9, found by the outside review of v0.5.2 before its tag. This check
+    used to read the host with a pattern of its own that stopped at the
+    first `:`, so `http://localhost:1@169.254.169.254/` read as `localhost`
+    and passed. RFC 3986 reads everything before the `@` as user-info and
+    the host as 169.254.169.254, and so does any HTTP proxy the URL is sent
+    through. Python's fetcher, with no proxy, reads a third answer and fails
+    to resolve it. A validator and a fetcher that parse one string
+    differently are two answers to "where does this go", and the caller
+    picks the one nobody checked.
+
+    So the host is the one the standard parser reads; user-info is refused,
+    because that is where the parsers part company; and what comes back is
+    REBUILT from the checked parts - scheme, host, port, path, query - so
+    the string that is fetched is the string that was judged.
+    """
+    def refuse(why: str) -> RpcError:
+        return _bad_args(
+            f"`metrics` {raw!r} {why}. This server fetches loopback without "
+            f"being asked, and nothing else on a model's say-so - a metadata "
+            f"endpoint or an internal service is one string away. Point it "
+            f"at localhost, pass a file, or set {ANY_URL_ENV}=1 on a machine "
+            f"you control. The `obsgate` CLI is not restricted.")
+
+    try:
+        parts = urllib.parse.urlsplit(raw)
+        port = parts.port
+    except ValueError as exc:
+        raise refuse(f"does not parse as a URL ({exc})") from None
+    if "@" in parts.netloc:
+        raise refuse("carries user-info before an `@`, and URL parsers "
+                     "disagree about which host that leaves")
+    scheme, host = parts.scheme.lower(), parts.hostname or ""
+    if scheme not in ("http", "https"):
+        raise refuse(f"uses {scheme!r}; only http and https are fetched")
+    if host not in _LOOPBACK:
+        raise refuse(f"points at {host!r}")
+    netloc = f"[{host}]" if ":" in host else host
+    if port is not None:
+        netloc += f":{port}"
+    return urllib.parse.urlunsplit(
+        (scheme, netloc, parts.path, parts.query, ""))
 
 
 def _argv_obsgate_check(a: dict) -> list[str]:

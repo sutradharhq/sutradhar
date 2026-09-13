@@ -27,11 +27,15 @@ subject stop being independent.
 """
 from __future__ import annotations
 
+import http.client
+import itertools
 import json
 import os
 import re
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -818,3 +822,74 @@ def test_obsgate_metrics_path_is_confined_like_repo(tmp_path):
         outside.unlink(missing_ok=True)
     assert bad["error"]["code"] == INVALID_PARAMS, bad
     assert "error" not in good or good["error"]["code"] != INVALID_PARAMS, good
+
+
+# ── R21-9: the host that is checked is the host that is fetched ─────────────
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _fetcher_host(url: str) -> str:
+    """The host Python's fetcher would connect to for `url`, read by the
+    same code `urlopen` runs. No socket is opened."""
+    return http.client.HTTPConnection(urllib.request.Request(url).host).host
+
+
+def test_the_loopback_check_reads_the_host_every_parser_reads(monkeypatch):
+    """R21-9 as a class rather than a payload. The check once read
+    `localhost` in `http://localhost:1@169.254.169.254/`, where RFC 3986 and
+    any HTTP proxy read 169.254.169.254 - and a proxy receives that
+    authority intact, which was witnessed with a local one. A test of that
+    one string pins one spelling. This walks a grid of schemes, user-info,
+    hosts, ports and tails, and everything the check ACCEPTS must hold four
+    agreements: the raw URL's RFC host is loopback (what a proxy would
+    reach); the returned URL carries no user-info and its RFC host is
+    loopback; Python's fetcher would connect to loopback for it; and it
+    still names the port, path and query that were asked for."""
+    from sutradhar_guards.mcp_server import ANY_URL_ENV, RpcError, _metrics_source
+
+    monkeypatch.delenv(ANY_URL_ENV, raising=False)
+    grid = itertools.product(
+        ["http", "HTTPS", "ftp", "file"],
+        ["", "a@", "a:@", "a:1@", "localhost@", "localhost:1@",
+         "127.0.0.1:80@", "[::1]:1@"],
+        ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "169.254.169.254",
+         "evil.example", "localhost.evil.example", "[::ffff:a9fe:a9fe]"],
+        ["", ":9", ":x", ":", ":9@evil.example"],
+        ["", "/", "/metrics", "?q=1", "#frag", "\\@evil.example/",
+         "%40evil.example/", "@evil.example/", "\t/m", " /m"],
+    )
+    accepted = set()
+    for scheme, userinfo, host, port, tail in grid:
+        url = f"{scheme}://{userinfo}{host}{port}{tail}"
+        try:
+            out = _metrics_source({"metrics": url})
+        except RpcError:
+            continue
+        accepted.add(url)
+        asked, got = urllib.parse.urlsplit(url), urllib.parse.urlsplit(out)
+        assert asked.hostname in _LOOPBACK_HOSTS, (url, out)
+        assert "@" not in out and got.hostname in _LOOPBACK_HOSTS, (url, out)
+        assert _fetcher_host(out) in _LOOPBACK_HOSTS, (url, out, _fetcher_host(out))
+        assert (got.port, got.path, got.query) == \
+            (asked.port, asked.path, asked.query), (url, out)
+    # The pair (6.7): a check that refuses everything passes every assertion
+    # above. These must get through.
+    for must in ("http://localhost/metrics", "HTTPS://127.0.0.1:9/metrics",
+                 "http://[::1]:9/metrics", "http://0.0.0.0:9?q=1"):
+        assert must in accepted, f"{must} was refused: the check refuses loopback"
+
+
+def test_obsgate_refuses_user_info_by_name(tmp_path):
+    """The reviewer's payload, through the real server. It is refused for
+    carrying user-info, not only because the host it hides is not loopback,
+    so the reason a person reads is the one that matters."""
+    s = Server(cwd=tmp_path)
+    try:
+        res = s.call_tool("obsgate_check", {
+            "metrics": "http://localhost:1@169.254.169.254/latest/meta-data/",
+            "floor": str(_metrics_file(tmp_path))})
+    finally:
+        s.close()
+    assert res["error"]["code"] == INVALID_PARAMS, res
+    assert "user-info" in res["error"]["message"], res

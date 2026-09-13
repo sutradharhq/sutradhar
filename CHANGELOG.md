@@ -9,8 +9,9 @@ upgrade by diffing against the tag they took.
 
 ## v0.5.2 - 2026-09-13
 
-**SECURITY: v0.5.1's fix never reached an installed plugin** (round 21,
-R21-1).
+**SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP
+server's loopback check could be talked past** (round 21, R21-1, R21-9 and
+R21-10; the second found by an outside review before this tag).
 
 - `plugin/.claude-plugin/plugin.json` declared `"version": "0.3.0"` from
   the day the plugin was added, and nobody bumped it. Claude Code uses that
@@ -27,6 +28,25 @@ R21-1).
   0.3.0. Both now name this release, and a test fails when either
   disagrees with the newest release heading in this file, or when a plugin
   manifest or marketplace entry declares a version again.
+- **The MCP server's loopback check read a different host from the one a
+  URL names** (R21-9). It took the host of a `metrics` URL with a pattern
+  of its own that stopped at the first `:`, so
+  `http://localhost:1@169.254.169.254/` read as `localhost` and was
+  allowed. RFC 3986 reads that host as 169.254.169.254. Witnessed on
+  Python 3.9.6: with no proxy, Python's fetcher tried to resolve the whole
+  `localhost:1@169.254.169.254` and failed; with an HTTP proxy configured,
+  the URL reached the proxy intact, and which host gets contacted is then
+  the proxy's reading. The host is now read by the standard parser,
+  user-info is refused, and the URL `obsgate` receives is rebuilt from the
+  checked parts. A test walks a grid of spellings and demands that every
+  URL the check accepts lands on loopback by the standard parser and by the
+  fetcher's own. Present since v0.5.1, which introduced the check.
+- `CITATION.cff` said 0.4.0 and the browser probe's MCP server said 0.2.0;
+  both now say 0.5.2, and the version test reads them. It also refuses any
+  `## ` heading it cannot read as a release, where the first draft would
+  have skipped a newer release spelled `## 0.6.0` or `## [0.6.0]` and
+  passed (R21-10). The README and CITATION no longer say every rule was
+  paid for by a defect: most were, and the rest are labelled practice.
 - This file gained the v0.5.0 and v0.5.1 headings it should have had at
   each tag, and v0.5.1's entry is corrected below.
 

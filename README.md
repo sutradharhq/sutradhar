@@ -14,8 +14,9 @@ an agent-built codebase so the play stays coherent while many hands, human
 and machine, work on it at once.
 
 It is a complete harness: backend, frontend, operations, and the agent
-workflow itself. Every rule in it was paid for by a real defect on a real
-production-bound codebase. None of it is aspiration.
+workflow itself. Most rules in it carry the real defect, on a real
+production-bound codebase, that paid for them; the few that do not are
+labelled practice. None of it is aspiration.
 
 ## See it catch something first
 
