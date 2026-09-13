@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
-#!/usr/bin/env python3
 """Guard: a stage that touches a path another agent owns is refused (7.3).
 
 7.3 has said "one worktree per agent, stage only named files, never

@@ -111,3 +111,56 @@ def test_no_import_warnings_on_cli_invocation(module: str):
         f"sutradhar_guards.{module} emits a RuntimeWarning on every CLI run:\n"
         f"{proc.stderr}"
     )
+
+
+# ── the shebang, where the kernel reads it ──────────────────────────────────
+#
+# R21-5. Six guards carried `#!/usr/bin/env python3` on line 3, under the
+# two-line license header, where no loader reads it: a kernel honours `#!`
+# only as the first two bytes of the file. Every documented invocation says
+# `python3 <file>`, so nothing broke - the line claimed the file could be run
+# directly, and the claim was false in six places and true in three. Marked
+# executable and run as `./swallow_lint.py --selfcheck`, the round-20 copy was
+# handed to a shell, which ran its docstring as commands ("Guard: flag
+# exception handlers ...: command not found") and exited 2.
+
+SHEBANG_DIRS = (
+    REPO_ROOT / "python" / "sutradhar_guards",
+    REPO_ROOT / "plugin" / "scripts",
+    REPO_ROOT / "plugin" / "guards",
+)
+
+
+def _python_files_with_a_shebang() -> dict:
+    """{path: 1-based line of the first `#!`} for every file that has one."""
+    found = {}
+    for root in SHEBANG_DIRS:
+        for path in sorted(root.glob("*.py")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            at = next((n for n, line in enumerate(lines, 1)
+                       if line.startswith("#!")), None)
+            if at is not None:
+                found[path] = at
+    return found
+
+
+def test_the_shebang_scan_has_something_to_read():
+    """Guards the guard (3.6): a glob that matched nothing, or a tree with no
+    shebang left in it, would pass the ratchet below over an empty dict."""
+    assert all(root.is_dir() for root in SHEBANG_DIRS), SHEBANG_DIRS
+    assert len(_python_files_with_a_shebang()) >= 3
+
+
+def test_every_shebang_is_on_line_one():
+    """A class ratchet over every `.py` in the three shipped directories, so a
+    guard added next month with its header pasted above the shebang is
+    refused the day it lands rather than found by reading."""
+    misplaced = {
+        str(path.relative_to(REPO_ROOT)): line
+        for path, line in _python_files_with_a_shebang().items() if line != 1
+    }
+    assert not misplaced, (
+        f"a shebang below line 1 is a comment, not an interpreter line: "
+        f"{misplaced}. Put `#!/usr/bin/env python3` first and the license "
+        f"header under it, then run `python3 plugin/sync_guards.py`."
+    )

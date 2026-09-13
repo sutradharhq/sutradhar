@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
-#!/usr/bin/env python3
 """Guard: a failed read must not be spelled the same as an empty one.
 
 Doctrine 2.4 says a failure states itself, and 2.7 says an ``except`` block
