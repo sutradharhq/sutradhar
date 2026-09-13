@@ -3,7 +3,8 @@
 Versioning: semver on the toolkit's file contracts (CLI flags, library
 APIs, baseline file formats, probe HTTP endpoints). Docs and doctrine
 evolve freely within a minor version. Tags mark releases; copy-in users
-upgrade by diffing against the tag they took.
+upgrade by diffing against the tag they took, and `bash bootstrap.sh --check
+<repo>`, run from a newer checkout, says which tag that was.
 
 ## Unreleased
 
@@ -36,6 +37,26 @@ assertion** (R21-3).
   is now graded by its own counts: errors and no failures is weak. The
   verdict and exit code are unchanged; the strength and its sentence are
   what move. Pytest grading is unchanged.
+
+**A copied tree can say which release it took and what fell behind**
+(R21-6).
+
+- `bootstrap.sh` now writes `.sutradhar-bootstrap` into the target: the
+  release, and a sha256 of every file it placed. Commit it. The copied
+  files themselves are unchanged - no version header, byte-identical to
+  their source.
+- `bash bootstrap.sh --check <repo>`, run from any checkout, reports each
+  recorded file as current, stale (unchanged since you took it and behind
+  this checkout), modified locally, or missing, with the release each came
+  from and a `diff` command for every stale one. It exits 1 only when
+  something is stale: your edits and deletions are reported, never failed.
+  It is offline - the checkout you run it from is the comparison.
+- A tree bootstrapped before this has no record. `--check` reports it as
+  not tracked, exits 0, and prints the command that starts one:
+  `bash bootstrap.sh --track <repo>`. Files identical to that checkout are
+  recorded as its release, others as found with release unknown.
+- A target that is not a directory now exits 2, like every other argument
+  bootstrap refuses, rather than 1.
 
 ## v0.5.2 - 2026-09-13
 

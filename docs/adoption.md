@@ -2,7 +2,10 @@
 
 How to roll Sutradhar onto a project. The framework is copy-in by design:
 no package to install, no version to chase, every file yours to edit. Run
-`bootstrap.sh <target-repo>` or copy pieces by hand.
+`bootstrap.sh <target-repo>` or copy pieces by hand. Bootstrap records what
+it copied in `.sutradhar-bootstrap`, so `bootstrap.sh --check <target-repo>`
+from a newer checkout can say what fell behind; a hand copy leaves no record
+(`bootstrap.sh --track <target-repo>` starts one).
 
 ## New project (greenfield)
 

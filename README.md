@@ -291,7 +291,10 @@ Then:
 
 Everything is copy-in, dependency-free, and yours to edit. There is no
 package to install and no version to chase. The guards are plain Python
-stdlib and plain TypeScript.
+stdlib and plain TypeScript. `bootstrap.sh` records what it copied, so when
+you pull a newer Sutradhar, `bash ../sutradhar/bootstrap.sh --check .` says
+which release your copies came from and which of them fell behind - and
+tells a stale copy from one you edited.
 
 ## The ideas that carry the weight
 

@@ -180,3 +180,8 @@ jobs:
           python3 /tmp/target/scripts/budget.py --selfcheck
           python3 /tmp/target/scripts/rounds.py --selfcheck
           python3 /tmp/target/scripts/ownership_lint.py --selfcheck
+          # R21-6: the tree says which release it took, and a fresh copy
+          # checks current. --check exits 1 on a stale file, so a record
+          # that listed the wrong bytes would fail this step.
+          test -f /tmp/target/.sutradhar-bootstrap
+          bash bootstrap.sh --check /tmp/target
