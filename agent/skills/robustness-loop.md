@@ -108,6 +108,15 @@ rested lens regrows findings). The proven set:
   import succeeded, and reads exactly like a pass. The pair is the
   evidence - known-good exits 0 AND known-bad exits non-zero. Round 4 of
   this repo's own register was a review reporting five such zeros green.
+- **A mutant you apply by hand can run stale bytecode.** Python reuses a
+  cached `.pyc` when the source's recorded size and whole-second mtime still
+  match, so a same-length edit (`<` for `>`, `True` for `False`) saved within
+  the same second as the last run can execute the unmutated code and report
+  "no change" - which reads as the guard being decoration. Run each in-place
+  mutant with a fresh `PYTHONPYCACHEPREFIX=$(mktemp -d)` (or bump the file's
+  mtime), and prove the restore by content hash rather than by eye.
+  `verify_guard.py` does not have this problem: it checks the commit out into
+  a fresh worktree, which has no cache to be stale (backflow B-34).
 - For anything touching a running system, the effect must be visible on a
   surface that outlives the round; `obsgate.py` gates that floor and
   answers INCONCLUSIVE rather than passing when it cannot read the source.

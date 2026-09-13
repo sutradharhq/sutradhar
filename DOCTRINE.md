@@ -96,7 +96,7 @@ generically - a review compared object representations that embedded the very
 line numbers under test and read "identical: false" off its own harness bug;
 and a test written to pin a configuration list was parametrised over that same
 list, so deleting an entry deleted the case that would have objected and the
-suite went from 205 green to 204 green.*
+suite went from 205 green to 204 green.* A defence in layers is verified one layer at a time, with every layer beneath the one under test removed first; otherwise the lowest layer that still refuses answers for all of them, and a dead layer above it passes. *Practice, not scar (B-30): a thread verifying a read-only surface built in three layers removed the store beneath them before testing the outer one, so the outer layer was the only thing left that could refuse, and each refusal it saw proved that layer and no other.*
 
 **2.3 Test through the real seam** (the route, the transport, the public
 function), never by poking internals the production path does not use.
@@ -238,7 +238,7 @@ over the output), not by prompt hope.
 
 **4.2 Eval sets are golden files for prompts.** Every LLM surface gets a
 small frozen eval run as a regression gate; a model or prompt swap must pass
-parity before shipping.
+parity before shipping. Eval cases are authored independently of the system they grade, never generated from its output, and a perfect score is investigated as contamination before it is trusted. *Practice, not scar (B-32), and convergence with 2.5 arrived at from the prompt side: a golden frozen from an engine's own output locked its defects in as truth (B-5), and an eval set drawn from a model's output grades the model against itself.*
 
 **4.3 Schema-validate every structured output** with bounded corrective
 retries. A model response is untrusted input.
@@ -248,7 +248,7 @@ Usage-priced dependencies without budgets are unbounded liabilities.
 
 **4.5 Human review is non-overridable for consequential artifacts.** Where
 generated output leaves the building (letters, filings, recommendations),
-`requires_review` is frozen at the type level, not a flag someone can flip.
+`requires_review` is frozen at the type level, not a flag someone can flip. It can also be enforced by absence: the model-facing surface has no approve action at all, and a ratchet with an empty baseline - which `ratchet.py` already expresses - fails the day that name appears. *Practice, not scar (B-33): the second half needs no new guard.*
 
 **4.6 Anchor for replay.** Hash the inputs (prompt version, grounded values,
 config) so any generated artifact can be re-derived and disputed later. The anchor applies to actions, not only artifacts: a consequential agent action - a routing decision, a committed change, a send - leaves a tamper-evident record of its inputs, so what the agent *did* can be replayed and disputed the way what it *generated* can. *Scar: B-14 - the thread that paid for it built the receipt before this file named the rule.*
@@ -270,7 +270,7 @@ measured ones; nothing else does.
 unattended soak, upgrade-in-place: recurring, with command-verifiable gates
 and a deviation log. *Scar: the un-restorable backup, the root-owned data
 directory, and the architecture-dependent build were all invisible to
-review and each fell out of the first drill that touched it.*
+review and each fell out of the first drill that touched it.* *A verified suite is still not a drill: one thread's full guard suite was green and mutation-verified, and thirty seconds of using the running product found two defects none of it could see (B-42).*
 
 **6.2 A backup that has not been restored somewhere is cosmetics.** No real
 data rides on an unreconciled restore path. *Scar: a plain `psql < dump`
@@ -362,7 +362,7 @@ two-minute grep.*
 **7.2 Trust the tree, not the doc.** Status docs go stale in days. Verify
 "done" claims against code before acting on them, and record your own
 completions the same day so the next session can trust the doc a little
-more.
+more. *Scar: a documented safety control existed in three docstrings and in no code. It was caught only because the value it should have produced read "unmeasured" rather than zero, which is also 2.9 converging from one more thread (B-38).*
 
 **7.3 One worktree per agent. Stage only named files; never `git add -A` on
 a shared tree.** *Scar: an agent's explicit `git add <file>` captured
