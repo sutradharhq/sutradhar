@@ -322,7 +322,9 @@ python scripts/verify_guard.py --guard-cmd "pytest tests/test_tenant_scope.py"
 
 It reverts the production half of your fix commit in a throwaway worktree,
 keeps the tests, and reruns them. Exit 0 `VERIFIED`, exit 1 `DECORATION`,
-exit 2 `INCONCLUSIVE` - and inconclusive is never reported as a pass. The
+exit 2 `INCONCLUSIVE` - and inconclusive is never reported as a pass. Add
+`--expect tests/test_tenant_scope.py::test_scope_is_bound` and a red is only
+`VERIFIED` when that test is among the failures, not merely something. The
 tool is held to its own rule: its selfcheck builds a real guard and a
 deliberately decorative one and fails unless it tells them apart.
 

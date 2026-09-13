@@ -67,6 +67,21 @@ assertion** (R21-3).
   All three are now INCONCLUSIVE, exit 2, with the argument named. Correctly
   spelled command lines are unaffected.
 
+**`verify_guard --expect <test-id>` names the test that must go red**
+(R21-7).
+
+- Any red used to be enough, so a revert that broke a neighbouring test
+  while the test written for the fix kept passing came back VERIFIED. With
+  `--expect` (repeatable), VERIFIED needs every named test among the
+  failures the runner reports: pytest's `FAILED path::test`, unittest's
+  `FAIL:` and `ERROR:` lines. A red elsewhere is DECORATION when the named
+  test is seen passing (run the guard with `-v`) and INCONCLUSIVE when it is
+  not seen at all; both say what went red. Output that names no test is
+  INCONCLUSIVE, never VERIFIED. `--json` gains `expected_tests` and
+  `red_tests`.
+- Without the flag nothing changes. Not yet exposed through the MCP server's
+  `verify_guard` tool.
+
 ## v0.5.2 - 2026-09-13
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP

@@ -28,6 +28,19 @@ stack-agnostic; it only needs Python to run, not to verify.
     python verify_guard.py --guard-cmd "python -m pytest tests/test_tenant.py"
     python verify_guard.py --commit a1b2c3d --guard-cmd "npm test -- cart" \
         --link node_modules
+    python verify_guard.py --guard-cmd "python -m pytest tests/test_tenant.py" \
+        --expect tests/test_tenant.py::test_scope_is_bound
+
+**`--expect <test-id>` (repeatable) names the test that must go red.** Any
+red is not the same claim as "the guard written for this fix went red": a
+revert can break a neighbour while the named test keeps passing. With it,
+VERIFIED requires every named test among the failures the runner reports -
+pytest's `FAILED path::test` and unittest's `FAIL:` / `ERROR:` lines. A red
+elsewhere is DECORATION when the named test is seen passing (`-v` lists
+passes) and INCONCLUSIVE when it is not seen at all, and both say what went
+red. Output that names no test is INCONCLUSIVE, never VERIFIED (2.9). An id
+may be given whole or by its trailing part: `test_x`, `Class::test_x`,
+`mod.Class.test_x`.
 
 **A guard command is one program with arguments, and it is NOT run through
 a shell.** It is `shlex`-split into an argv list and spawned directly; the
@@ -134,6 +147,8 @@ class Result:
     reverted_exit: int | None = None
     weak: bool = False
     warnings: list[str] = field(default_factory=list)
+    expected_tests: list[str] = field(default_factory=list)
+    red_tests: list[str] = field(default_factory=list)
 
     @property
     def exit_code(self) -> int:
@@ -152,6 +167,8 @@ class Result:
             "reverted_exit": self.reverted_exit,
             "weak_proof": self.weak,
             "warnings": self.warnings,
+            "expected_tests": self.expected_tests,
+            "red_tests": self.red_tests,
         }, indent=2)
 
 
@@ -492,6 +509,67 @@ def grade_red(output: str) -> tuple[bool, str]:
     return False, "the guard failed by assertion - it discriminates on behaviour."
 
 
+# ── which tests went red (R21-7) ────────────────────────────────────────────
+#
+# "Something went red without the fix" and "the test written for this fix
+# went red" are different claims, and 2.2 asks for the second. A build
+# thread's mutation harness records, for every mutant, the tests it must turn
+# red; `--expect` makes that the claim this tool certifies. The ids are read
+# from the runner's own report, and a report that names no test answers
+# INCONCLUSIVE - never VERIFIED on the strength of an exit code (2.9).
+
+_PYTEST_SUMMARY = re.compile(r"^(FAILED|ERROR|PASSED) (\S+::\S+)", re.MULTILINE)
+_PYTEST_VERBOSE = re.compile(r"^(\S+::\S+) (FAILED|ERROR|PASSED)\b", re.MULTILINE)
+_UNITTEST_RED = re.compile(r"^(?:FAIL|ERROR): (\w+) \(([\w.]+)\)", re.MULTILINE)
+_UNITTEST_OK = re.compile(r"^(\w+) \(([\w.]+)\)(?:\n[^\n]*)? \.\.\. ok\s*$", re.MULTILINE)
+
+
+def _unittest_id(name: str, where: str) -> str:
+    """`module.Class.test`, whether the runner printed `(module.Class)` or,
+    from Python 3.11, `(module.Class.test)`."""
+    return where if where.endswith("." + name) else f"{where}.{name}"
+
+
+def tests_in_output(output: str) -> tuple[list[str], list[str]]:
+    """(ids that failed or errored, ids seen passing), as the runner wrote them.
+
+    Reads pytest's `FAILED path::test` summary and `path::test PASSED`
+    verbose lines, and unittest's `FAIL: test (module.Class)` / `ERROR:`
+    blocks and its `-v` `... ok` lines. Both lists are empty when the output
+    names no test at all.
+    """
+    red: list[str] = []
+    passed: list[str] = []
+    for m in _PYTEST_SUMMARY.finditer(output):
+        (passed if m.group(1) == "PASSED" else red).append(m.group(2))
+    for m in _PYTEST_VERBOSE.finditer(output):
+        (passed if m.group(2) == "PASSED" else red).append(m.group(1))
+    for m in _UNITTEST_RED.finditer(output):
+        red.append(_unittest_id(m.group(1), m.group(2)))
+    for m in _UNITTEST_OK.finditer(output):
+        passed.append(_unittest_id(m.group(1), m.group(2)))
+    red = list(dict.fromkeys(red))
+    passed = [p for p in dict.fromkeys(passed) if p not in red]
+    return red, passed
+
+
+def _spellings(test_id: str) -> set[str]:
+    """Every name `--expect` accepts for one reported id: the whole id and
+    each trailing part (`tests/t.py::C::test_x`, `C::test_x`, `test_x`;
+    `pkg.mod.C.test_x` down to `test_x`), with and without a `[param]`."""
+    names: set[str] = set()
+    for tid in {test_id, test_id.split("[", 1)[0]}:
+        sep = "::" if "::" in tid else "."
+        parts = tid.split(sep)
+        names |= {sep.join(parts[i:]) for i in range(len(parts))}
+    return names
+
+
+def unmatched(expected: list[str], ids: list[str]) -> list[str]:
+    """The expected names that match none of `ids`."""
+    return [e for e in expected if not any(e in _spellings(t) for t in ids)]
+
+
 # ── the verification ────────────────────────────────────────────────────────
 
 def verify(
@@ -505,6 +583,7 @@ def verify(
     setup_cmd: str = "",
     keep_worktree: bool = False,
     require_guard_in_commit: bool = False,
+    expect: list[str] | None = None,
 ) -> Result:
     warnings: list[str] = []
 
@@ -666,12 +745,56 @@ def verify(
             )
 
         weak, why = grade_red(reverted.output)
+        common = dict(
+            commit=sha, code_files=code, guard_files=guard, inert_files=inert,
+            baseline_exit=0, reverted_exit=reverted.exit_code, warnings=warnings,
+            expected_tests=list(expect or []),
+        )
+        if expect:
+            red_ids, passed_ids = tests_in_output(reverted.output)
+            common["red_tests"] = red_ids
+            named = ", ".join(expect)
+            if not red_ids:
+                return Result(
+                    INCONCLUSIVE,
+                    f"the guard went red without the fix (exit "
+                    f"{reverted.exit_code}), but its output names no failing "
+                    f"test, so whether {named} went red cannot be told. An exit "
+                    f"code is not the named test (2.9). Let the runner report "
+                    f"its failures - pytest's summary, unittest's FAIL:/ERROR: "
+                    f"blocks - or run without --expect.",
+                    **common,
+                )
+            missing = unmatched(expect, red_ids)
+            if missing:
+                went_red = ", ".join(red_ids[:8]) + (
+                    f" (+{len(red_ids) - 8} more)" if len(red_ids) > 8 else "")
+                seen_passing = not unmatched(missing, passed_ids)
+                if seen_passing:
+                    return Result(
+                        DECORATION,
+                        f"the guard went red without the fix, but not where it "
+                        f"was expected: {', '.join(missing)} PASSED with the fix "
+                        f"reverted. What went red: {went_red}. The test named for "
+                        f"this fix cannot detect the defect it was written for; "
+                        f"something else caught it.",
+                        **common,
+                    )
+                return Result(
+                    INCONCLUSIVE,
+                    f"the guard went red without the fix, but {', '.join(missing)} "
+                    f"is not among the failures, and the output does not show it "
+                    f"passing either - it may have passed unlisted, or not run "
+                    f"under that name. What went red: {went_red}. Run the guard "
+                    f"verbosely (pytest -v, unittest -v) so passes are named, or "
+                    f"check the id.",
+                    **common,
+                )
+            why = f"{why} Every expected test is among the failures: {named}."
         return Result(
             VERIFIED,
             f"green with the fix, red without it (exit {reverted.exit_code}): {why}",
-            commit=sha, code_files=code, guard_files=guard, inert_files=inert,
-            baseline_exit=0, reverted_exit=reverted.exit_code,
-            weak=weak, warnings=warnings,
+            weak=weak, **common,
         )
 
     except GitError as exc:
@@ -967,7 +1090,7 @@ def _print_human(res: Result) -> None:
 #: verification than the one asked for and still reports a verdict on it.
 _VALUE_FLAGS = frozenset({
     "--commit", "--guard-cmd", "--setup-cmd", "--repo", "--timeout",
-    "--code", "--guard-paths", "--link",
+    "--code", "--guard-paths", "--link", "--expect",
 })
 _BARE_FLAGS = frozenset({
     "--json", "--keep-worktree", "--require-guard-in-commit",
@@ -994,6 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
     code_patterns: list[str] = []
     guard_patterns: list[str] = []
     links: list[str] = []
+    expected: list[str] = []
     as_json = "--json" in argv
     keep = "--keep-worktree" in argv
     require_guard = "--require-guard-in-commit" in argv
@@ -1038,6 +1162,8 @@ def main(argv: list[str] | None = None) -> int:
             guard_patterns.append(value)
         elif arg == "--link":
             links.append(value)
+        elif arg == "--expect":
+            expected.append(value)
 
     try:
         root = _git(repo, "rev-parse", "--show-toplevel").strip()
@@ -1051,6 +1177,7 @@ def main(argv: list[str] | None = None) -> int:
         code_patterns=code_patterns or None, guard_patterns=guard_patterns or None,
         timeout=timeout, links=links, setup_cmd=setup_cmd,
         keep_worktree=keep, require_guard_in_commit=require_guard,
+        expect=expected or None,
     )
     if as_json:
         print(res.to_json())

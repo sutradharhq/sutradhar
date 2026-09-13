@@ -200,6 +200,136 @@ def test_a_failed_import_is_weak_even_without_unittest_s_summary_line():
     assert weak and "weaker proof" in why
 
 
+# ── naming the test that must go red (R21-7) ────────────────────────────────
+#
+# One fix, two tests. `test_bulk_discount` is the guard written for it and
+# goes red when the fix is reverted; `test_small_order` passes either way.
+# Any red used to be enough. With --expect the named test has to be among
+# the reds, and when it is not, the answer says what went red instead.
+
+_EXPECT_TESTS = {
+    "pytest": (
+        "from calc import total\n\n\n"
+        "def test_bulk_discount():\n    assert total(100, 10) == 900.0\n\n\n"
+        "def test_small_order():\n    assert total(100, 1) == 100\n"),
+    "unittest": (
+        "import unittest\nfrom calc import total\n\n\n"
+        "class T(unittest.TestCase):\n"
+        "    def test_bulk_discount(self):\n"
+        "        self.assertEqual(total(100, 10), 900.0)\n\n"
+        "    def test_small_order(self):\n"
+        "        self.assertEqual(total(100, 1), 100)\n"),
+}
+
+
+def _expect_repo(tmp_path: Path, runner: str, verbose: bool = False) -> tuple[Path, str]:
+    root, _ = _runner_repo(tmp_path, runner, "behaviour")
+    (root / "tests" / "test_calc.py").write_text(_EXPECT_TESTS[runner])
+    (root / "tests" / "check_exit_only.py").write_text(
+        "import os, sys\nsys.path.insert(0, os.getcwd())\nimport calc\n"
+        "sys.exit(0 if calc.total(100, 10) == 900.0 else 1)\n")
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=t",
+                    "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false",
+                    "commit", "-q", "--amend", "-a", "--no-edit"],
+                   check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=t",
+                    "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false",
+                    "add", "tests/check_exit_only.py"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=t",
+                    "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false",
+                    "commit", "-q", "--amend", "--no-edit"],
+                   check=True, capture_output=True, text=True)
+    py = __import__("shlex").quote(sys.executable)
+    # `-v` alone: pytest's -q and -v cancel, and the first draft of this
+    # helper passed both and got a run that listed no passes at all.
+    if runner == "unittest":
+        cmd = f"{py} -m unittest{' -v' if verbose else ''} tests.test_calc"
+    else:
+        cmd = (f"{py} -m pytest {'-v' if verbose else '-q'} -p no:cacheprovider "
+               f"tests/test_calc.py")
+    return root, cmd
+
+
+@pytest.mark.parametrize("runner,name", [
+    ("pytest", "test_bulk_discount"),
+    ("pytest", "tests/test_calc.py::test_bulk_discount"),
+    ("unittest", "test_bulk_discount"),
+    ("unittest", "T.test_bulk_discount"),
+    ("unittest", "tests.test_calc.T.test_bulk_discount"),
+])
+def test_the_named_test_going_red_is_verified(tmp_path, runner, name):
+    root, cmd = _expect_repo(tmp_path, runner)
+    res = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120, expect=[name])
+    assert res.verdict == vg.VERIFIED, res.reason
+    assert res.expected_tests == [name]
+    assert any("test_bulk_discount" in t for t in res.red_tests), res.red_tests
+    assert "Every expected test is among the failures" in res.reason
+
+
+@pytest.mark.parametrize("runner", ["pytest", "unittest"])
+def test_a_red_elsewhere_with_the_named_test_seen_passing_is_decoration(tmp_path, runner):
+    root, cmd = _expect_repo(tmp_path, runner, verbose=True)
+    res = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120,
+                    expect=["test_small_order"])
+    assert res.verdict == vg.DECORATION, res.reason
+    assert "test_small_order PASSED" in res.reason
+    assert "test_bulk_discount" in res.reason, "the answer must name what went red"
+
+
+def test_a_red_elsewhere_with_the_named_test_not_seen_is_inconclusive(tmp_path):
+    """pytest -q lists failures and not passes, so a named test absent from
+    the failures may have passed or may never have run. Neither is VERIFIED,
+    and calling it DECORATION would claim a pass nobody saw (2.9)."""
+    root, cmd = _expect_repo(tmp_path, "pytest")
+    res = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120,
+                    expect=["test_small_order"])
+    assert res.verdict == vg.INCONCLUSIVE, res.reason
+    assert "not among the failures" in res.reason
+    assert "tests/test_calc.py::test_bulk_discount" in res.reason
+
+
+def test_a_red_that_names_no_test_is_inconclusive_never_verified(tmp_path):
+    root, _ = _expect_repo(tmp_path, "pytest")
+    cmd = f"{__import__('shlex').quote(sys.executable)} tests/check_exit_only.py"
+    res = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120,
+                    expect=["test_bulk_discount"])
+    assert res.verdict == vg.INCONCLUSIVE, res.reason
+    assert "names no failing test" in res.reason
+    # ...and without --expect the same run is VERIFIED exactly as before.
+    plain = vg.verify(root, commit="HEAD", guard_cmd=cmd, timeout=120)
+    assert plain.verdict == vg.VERIFIED, plain.reason
+    assert plain.expected_tests == [] and plain.red_tests == []
+
+
+def test_expect_reaches_the_verdict_through_the_cli(tmp_path):
+    root, cmd = _expect_repo(tmp_path, "pytest", verbose=True)
+    proc = subprocess.run(
+        [sys.executable, "-m", "sutradhar_guards.verify_guard", "--repo", str(root),
+         "--commit", "HEAD", "--guard-cmd", cmd, "--json",
+         "--expect", "test_bulk_discount", "--expect", "test_small_order"],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True, text=True, timeout=300,
+    )
+    import json as _json
+    out = _json.loads(proc.stdout)
+    assert (proc.returncode, out["verdict"]) == (1, "DECORATION"), proc.stdout + proc.stderr
+    assert out["expected_tests"] == ["test_bulk_discount", "test_small_order"]
+    assert "tests/test_calc.py::test_bulk_discount" in out["red_tests"]
+
+
+def test_the_test_id_reader_on_both_runners_output_shapes():
+    red, passed = vg.tests_in_output(
+        "tests/t.py::test_a PASSED  [ 50%]\n"
+        "tests/t.py::test_b FAILED  [100%]\n"
+        "FAILED tests/t.py::test_b - assert 1 == 2\n"
+        "FAIL: test_c (pkg.mod.C)\n"
+        "ERROR: test_d (pkg.mod.C.test_d)\n"
+        "test_e (pkg.mod.C.test_e) ... ok\n")
+    assert red == ["tests/t.py::test_b", "pkg.mod.C.test_c", "pkg.mod.C.test_d"]
+    assert passed == ["tests/t.py::test_a", "pkg.mod.C.test_e"]
+    assert vg.unmatched(["test_b", "C.test_c", "test_zz"], red) == ["test_zz"]
+
+
 # ── end to end, on real git repos ───────────────────────────────────────────
 
 def test_selfcheck_classification_passes():
