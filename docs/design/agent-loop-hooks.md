@@ -130,15 +130,17 @@ convention `ci/guards.yml` already reads — and:
 
 | HEAD | Verdict | What the hook returns |
 |---|---|---|
-| `Guard-cmd:` present, author is not you | **not run** | exit 0 with `systemMessage` naming the author and the command to run by hand |
+| `Guard-cmd:` present, HEAD on a remote (or that cannot be read) | **not run** | exit 0 with `systemMessage` giving the command to run by hand |
+| `Guard-cmd:` present, HEAD local, author is not you | **not run** | exit 0 with `systemMessage` naming the author and the command to run by hand |
 | `Guard-cmd:` present, `verify_guard` says VERIFIED | pass | exit 0, silent |
 | `Guard-cmd:` present, DECORATION | block | `decision: "block"` + `reason` carrying the verifier's own text |
 | `Guard-cmd:` present, INCONCLUSIVE | **inconclusive** | exit 0 with `systemMessage` naming it INCONCLUSIVE and what would resolve it |
 | no trailer, commit touches production **and** test files | reminder | exit 0 with `systemMessage` |
 | no trailer, anything else | pass | exit 0, silent |
 
-**Whose command is it** (R16-2). The author row comes first because it is
-checked first, before the trailer is anywhere near a subprocess. A
+**Whose command is it** (R16-2, revised by R20-5). The rows that decline
+come first because they are checked first, before the trailer is anywhere
+near a subprocess. A
 `Guard-cmd:` trailer is a command, and HEAD is whatever is checked out:
 checking out a pull request, pulling upstream, or merging a contributor all
 make somebody else's commit message the input to this hook, and the command
@@ -146,15 +148,19 @@ then runs on this machine, as this user, when the turn ends. The throwaway
 worktree `verify_guard` builds is not a sandbox — same uid, same `$HOME`,
 same environment, same network.
 
-So the hook compares HEAD's author email (`git log -1 --format=%ae`) with
-`git config user.email` in that repository and runs the trailer only when
-they match. An unset `user.email` is treated as *not* a match and said so by
-name: a repository with no identity cannot assert that the commit is yours,
-and defaulting to "run it" would switch the check off on exactly the
-machines least configured to have one. The message names the author, says
-the hook only runs trailers written by the current git user, and prints the
-exact one-line `verify_guard` invocation — because a silent refusal reads
-exactly like a pass (2.9).
+So the hook asks two questions first. Is HEAD on any remote-tracking ref
+(`git branch -r --contains HEAD`)? A commit that arrived by a fetch, a pull
+or a checkout is, and so is anything whose status cannot be read; the hook
+runs none of those. Only local, unpushed work goes on, and nobody else can
+make HEAD be that. Then it compares HEAD's author email
+(`git log -1 --format=%ae`) with `git config user.email` and declines on a
+mismatch, or on an unset `user.email`, naming the author. In round 16 that
+comparison was the whole gate, and as a control it was decoration: an
+author email is self-asserted and public, so a hostile commit sets it to
+yours (R20-5). It stays as a speed bump for a colleague's commit you
+cherry-picked, and is named as one. `SUTRADHAR_RUN_TRAILERS=1` skips both.
+Every decline prints the exact one-line `verify_guard` invocation, because
+a silent refusal reads exactly like a pass (2.9).
 
 **And what the command may be** (R16-3). `verify_guard` no longer runs its
 `--guard-cmd` or `--setup-cmd` through a shell. The string is `shlex`-split

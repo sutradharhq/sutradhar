@@ -137,6 +137,19 @@ def server():
 
 
 @pytest.fixture
+def server_in_tmp(tmp_path):
+    """A server started in the test's own temp directory, so the trees the
+    fixtures below create are inside the tree it is confined to (R21-12).
+    Started in this repository, as `server` is, those paths are outside it
+    and refused - which is the confinement working, not the test failing."""
+    s = Server(cwd=tmp_path)
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+@pytest.fixture
 def clean_tree(tmp_path):
     d = tmp_path / "clean"
     d.mkdir()
@@ -249,7 +262,7 @@ def test_verify_guards_exit_2_arrives_as_a_verdict(server, tmp_path):
     assert res["result"]["isError"] is False
 
 
-def test_another_guards_exit_2_arrives_as_an_instrument_failure(server, tmp_path):
+def test_another_guards_exit_2_arrives_as_an_instrument_failure(server_in_tmp, tmp_path):
     """The other half of the same runtime assertion, and the reason a single
     shared exit-code table is wrong.
 
@@ -260,8 +273,8 @@ def test_another_guards_exit_2_arrives_as_an_instrument_failure(server, tmp_path
     """
     empty = tmp_path / "no-rounds"
     empty.mkdir()
-    res = server.call_tool("rounds_check", {"rounds_dir": str(empty),
-                                            "repo": str(REPO_ROOT)})
+    res = server_in_tmp.call_tool("rounds_check", {"rounds_dir": str(empty),
+                                                   "repo": str(tmp_path)})
     assert "result" not in res, (
         f"a guard that found nothing to check returned the verdict "
         f"{res.get('result', {}).get('structuredContent', {}).get('verdict')!r} - "
@@ -337,8 +350,8 @@ def test_unknown_method_is_method_not_found(server):
 
 # ── results vs errors: the distinction the design turns on ──────────────────
 
-def test_green_guard_is_a_result(server, clean_tree):
-    res = server.call_tool("interpolation_lint",
+def test_green_guard_is_a_result(server_in_tmp, clean_tree):
+    res = server_in_tmp.call_tool("interpolation_lint",
                            {"paths": [str(clean_tree)], "keywords": "sql"})
     assert "error" not in res, res
     sc = res["result"]["structuredContent"]
@@ -348,7 +361,7 @@ def test_green_guard_is_a_result(server, clean_tree):
     assert res["result"]["isError"] is False
 
 
-def test_red_guard_is_a_result_not_an_error(server, dirty_tree):
+def test_red_guard_is_a_result_not_an_error(server_in_tmp, dirty_tree):
     """THE test. A guard that found something is the tool WORKING.
 
     Reported as a JSON-RPC error it tells the agent "your call failed" about
@@ -357,8 +370,8 @@ def test_red_guard_is_a_result_not_an_error(server, dirty_tree):
     FINDINGS is not fixed by adjusting parameters. An error reads as
     flakiness, and flakiness gets retried instead of acted on.
     """
-    res = server.call_tool("interpolation_lint",
-                           {"paths": [str(dirty_tree)], "keywords": "sql"})
+    res = server_in_tmp.call_tool("interpolation_lint",
+                                  {"paths": [str(dirty_tree)], "keywords": "sql"})
     assert "error" not in res, (
         f"a red guard came back as a JSON-RPC error: {res.get('error')}")
     result = res["result"]
@@ -374,12 +387,12 @@ def test_red_guard_is_a_result_not_an_error(server, dirty_tree):
         in sc["command"]
 
 
-def test_red_and_green_differ_only_in_the_verdict(server, clean_tree, dirty_tree):
+def test_red_and_green_differ_only_in_the_verdict(server_in_tmp, clean_tree, dirty_tree):
     """A verdict that never varies is decoration. Both calls must reach the
     same SHAPE with opposite answers, or one of them is not being computed."""
-    green = server.call_tool("interpolation_lint",
-                             {"paths": [str(clean_tree)], "keywords": "sql"})
-    red = server.call_tool("interpolation_lint",
+    green = server_in_tmp.call_tool("interpolation_lint",
+                                    {"paths": [str(clean_tree)], "keywords": "sql"})
+    red = server_in_tmp.call_tool("interpolation_lint",
                            {"paths": [str(dirty_tree)], "keywords": "sql"})
     g, r = green["result"]["structuredContent"], red["result"]["structuredContent"]
     assert (g["verdict"], r["verdict"]) == ("OK", "FINDINGS")
@@ -448,11 +461,12 @@ def test_a_repo_outside_this_servers_tree_is_a_caller_error(server, tmp_path):
     assert str(elsewhere) in res["error"]["message"]
 
 
-def test_a_repo_inside_this_servers_tree_is_fine(server, clean_tree):
+def test_a_repo_inside_this_servers_tree_is_fine(server_in_tmp, clean_tree, tmp_path):
     """The half that makes the refusal above mean something: a confinement
     that refused everything would pass that test and switch the tool off."""
-    inside = REPO_ROOT / "python"
-    res = server.call_tool("interpolation_lint",
+    inside = tmp_path / "sub"
+    inside.mkdir()
+    res = server_in_tmp.call_tool("interpolation_lint",
                            {"paths": [str(clean_tree)], "repo": str(inside)})
     assert "error" not in res, res.get("error")
     assert res["result"]["structuredContent"]["cwd"] == str(inside)
@@ -497,9 +511,10 @@ def test_a_server_outside_a_git_repo_is_confined_to_its_own_cwd(tmp_path):
 
 # ── the session survives bad input ──────────────────────────────────────────
 
-def test_malformed_request_does_not_kill_the_session(server, clean_tree):
+def test_malformed_request_does_not_kill_the_session(server_in_tmp, clean_tree):
     """A bad line must cost that request, not the conversation the agent is
     mid-task in."""
+    server = server_in_tmp
     bad = server.send_line("{this is not json")
     assert bad["error"]["code"] == PARSE_ERROR
     assert bad["id"] is None
@@ -539,7 +554,7 @@ def test_cap_output_truncates_and_reports_the_true_total():
     assert (text, cut, total) == ("short", False, 5)
 
 
-def test_output_cap_truncates_and_says_so(server, tmp_path):
+def test_output_cap_truncates_and_says_so(server_in_tmp, tmp_path):
     """End to end, through the real seam, with a guard that really does
     print more than the cap.
 
@@ -556,8 +571,8 @@ def test_output_cap_truncates_and_says_so(server, tmp_path):
     lines += ["    ]", ""]
     (big / "big.py").write_text("\n".join(lines))
 
-    res = server.call_tool("interpolation_lint",
-                           {"paths": [str(big)], "keywords": "sql"})
+    res = server_in_tmp.call_tool("interpolation_lint",
+                                  {"paths": [str(big)], "keywords": "sql"})
     sc = res["result"]["structuredContent"]
 
     assert sc["stdout_total_bytes"] > MAX_OUTPUT_BYTES, (
@@ -575,7 +590,7 @@ def test_output_cap_truncates_and_says_so(server, tmp_path):
 
 
 def test_output_cap_truncation_notice_names_a_file_with_the_whole_output(
-        server, tmp_path):
+        server_in_tmp, tmp_path):
     """R16-4. Truncation stays stated - and stops being a loss.
 
     "Re-run the command in a shell" was the old advice, and it is advice the
@@ -590,8 +605,8 @@ def test_output_cap_truncation_notice_names_a_file_with_the_whole_output(
     lines += ["    ]", ""]
     (big / "big.py").write_text("\n".join(lines))
 
-    res = server.call_tool("interpolation_lint",
-                           {"paths": [str(big)], "keywords": "sql"})
+    res = server_in_tmp.call_tool("interpolation_lint",
+                                  {"paths": [str(big)], "keywords": "sql"})
     sc = res["result"]["structuredContent"]
     assert sc["stdout_truncated"] is True, (
         "the fixture did not exceed the cap; this test would pass vacuously")
@@ -893,3 +908,132 @@ def test_obsgate_refuses_user_info_by_name(tmp_path):
         s.close()
     assert res["error"]["code"] == INVALID_PARAMS, res
     assert "user-info" in res["error"]["message"], res
+
+
+# ── R21-12: every path an argument names stays in the repository ────────────
+
+#: Schema properties that are not paths, and why. A string or list argument
+#: in neither this table nor `mcp_server._PATH_ARGUMENTS` fails the test
+#: below, so a new path argument cannot arrive unconfined by default.
+_NOT_A_PATH = {
+    "repo": "confined by confined_cwd before anything runs",
+    "metrics": "a URL or a file, confined by _metrics_source",
+    "guard_cmd": "a command; verify_guard runs it, and no path rule bounds that",
+    "setup_cmd": "a command, as guard_cmd",
+    "commit": "a git revision",
+    "code_paths": "globs matched inside verify_guard's own throwaway worktree",
+    "guard_paths": "globs matched inside verify_guard's own throwaway worktree",
+    "allow_call": "function names",
+    "safe_call": "function names",
+    "keywords": "query-language names",
+}
+
+
+def test_every_tool_argument_is_classified():
+    from sutradhar_guards.mcp_server import _PATH_ARGUMENTS
+
+    unclassified = []
+    for tool in TOOLS:
+        props = tool["inputSchema"].get("properties", {})
+        declared = set(_PATH_ARGUMENTS.get(tool["name"], ()))
+        assert declared <= set(props), (tool["name"], declared - set(props))
+        for key, schema in props.items():
+            if schema.get("type") not in ("string", "array"):
+                continue
+            if key in declared:
+                assert key not in _NOT_A_PATH, (tool["name"], key)
+            elif key not in _NOT_A_PATH:
+                unclassified.append(f"{tool['name']}.{key}")
+    assert not unclassified, (
+        f"arguments that are neither a confined path nor a reasoned non-path: "
+        f"{unclassified}. Add each to mcp_server._PATH_ARGUMENTS, or to "
+        f"_NOT_A_PATH here with the reason it is not a path.")
+
+
+def _arguments_with(tool: dict, key: str, value: str) -> dict:
+    """The smallest arguments `tool` accepts, with `key` set to `value`."""
+    props, args = tool["inputSchema"]["properties"], {"timeout_s": 5}
+    for name in tool["inputSchema"].get("required", []):
+        args[name] = ["."] if props[name].get("type") == "array" else "."
+    if "metrics" in props:
+        args["metrics"] = "http://127.0.0.1:9/metrics"
+    if "guard_cmd" in props:
+        args["guard_cmd"] = "python -c pass"
+    args[key] = [value] if props[key].get("type") == "array" else value
+    return args
+
+
+def test_every_path_argument_is_refused_outside_the_repository(tmp_path, monkeypatch):
+    """R21-12 as a class. For every tool and every argument declared a path,
+    a path outside the repository this test runs in is a caller error,
+    raised before any guard is spawned. The review found one - an
+    `obsgate_snapshot` `out` written beside the repository - and a test of
+    that one argument would leave the next twelve to chance."""
+    from sutradhar_guards.mcp_server import (
+        ANY_REPO_ENV, RpcError, _PATH_ARGUMENTS, run_tool)
+
+    monkeypatch.delenv(ANY_REPO_ENV, raising=False)
+    outside = str(tmp_path / "outside" / "x.json")
+    by_name = {t["name"]: t for t in TOOLS}
+    checked = []
+    for name, keys in _PATH_ARGUMENTS.items():
+        for key in keys:
+            with pytest.raises(RpcError) as caught:
+                run_tool(name, _arguments_with(by_name[name], key, outside))
+            assert caught.value.code == INVALID_PARAMS, (name, key, caught.value.message)
+            assert f"`{key}`" in caught.value.message, (name, key, caught.value.message)
+            checked.append(f"{name}.{key}")
+    assert len(checked) == 15, checked
+
+
+def test_path_confinement_follows_the_guard_and_symlinks(tmp_path, monkeypatch):
+    """The pair (6.7) for the class test above, which a check refusing every
+    path would also pass. Inside the tree - relative to where the guard
+    runs, not yet existing, or absolute - is accepted; `..` out of it, an
+    absolute path elsewhere, and a symlink inside it that points out are
+    refused; the operator's opt-in lifts it."""
+    from sutradhar_guards import mcp_server as m
+
+    root = tmp_path / "repo"
+    (root / "docs").mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (root / "escape").symlink_to(elsewhere)
+    monkeypatch.delenv(m.ANY_REPO_ENV, raising=False)
+    monkeypatch.setattr(m, "confinement_root", lambda: root.resolve())
+    cwd = str(root / "docs")
+
+    for fine in ("before.json", "../snap.json", str(root / "new" / "out.json")):
+        m.confine_path_arguments("obsgate_snapshot", {"out": fine}, cwd)
+    m.confine_path_arguments("swallow_lint", {"paths": [".", "../docs"]}, cwd)
+
+    for bad in ("../../elsewhere/out.json", str(elsewhere / "out.json"),
+                "../escape/out.json"):
+        with pytest.raises(m.RpcError):
+            m.confine_path_arguments("obsgate_snapshot", {"out": bad}, cwd)
+    with pytest.raises(m.RpcError):
+        m.confine_path_arguments("swallow_lint", {"paths": [".", str(elsewhere)]}, cwd)
+
+    monkeypatch.setenv(m.ANY_REPO_ENV, "1")
+    m.confine_path_arguments("obsgate_snapshot", {"out": str(elsewhere / "out.json")}, cwd)
+
+
+def test_obsgate_snapshot_writes_nothing_outside_the_repository(tmp_path):
+    """The reviewer's case through the real server: an `out` beside the tree
+    the server was started in is refused and no file appears, while an `out`
+    inside it is written."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    metrics = _metrics_file(repo)
+    beside = tmp_path / "beside-the-repo.json"
+    s = Server(cwd=repo)
+    try:
+        refused = s.call_tool("obsgate_snapshot",
+                              {"metrics": str(metrics), "out": str(beside)})
+        written = s.call_tool("obsgate_snapshot",
+                              {"metrics": str(metrics), "out": str(repo / "snap.json")})
+    finally:
+        s.close()
+    assert refused["error"]["code"] == INVALID_PARAMS, refused
+    assert not beside.exists(), "the refused snapshot was written anyway"
+    assert "error" not in written and (repo / "snap.json").is_file(), written

@@ -435,9 +435,19 @@ def _loopback_url(raw: str) -> str:
         (scheme, netloc, parts.path, parts.query, ""))
 
 
+def _redirects_for_a_model() -> list[str]:
+    """R21-11. The loopback check judges the URL, and while redirects are
+    followed that is a judgement about the first request only: an allowed
+    loopback server answering 302 sends the fetch wherever it points. So a
+    URL a model chose is fetched with redirects refused - obsgate reports
+    the Location instead - unless the operator allowed any host anyway."""
+    return [] if os.environ.get(ANY_URL_ENV) == "1" else ["--redirects", "refuse"]
+
+
 def _argv_obsgate_check(a: dict) -> list[str]:
     argv = ["check", "--metrics", _metrics_source(a),
-            "--floor", _string(a, "floor", required=True)]
+            "--floor", _string(a, "floor", required=True),
+            *_redirects_for_a_model()]
     samples = _int(a, "samples")
     if samples is not None:
         argv += ["--samples", str(samples)]
@@ -449,7 +459,8 @@ def _argv_obsgate_check(a: dict) -> list[str]:
 
 def _argv_obsgate_snapshot(a: dict) -> list[str]:
     return ["snapshot", "--metrics", _metrics_source(a),
-            "--out", _string(a, "out", required=True)]
+            "--out", _string(a, "out", required=True),
+            *_redirects_for_a_model()]
 
 
 def _argv_obsgate_effects(a: dict) -> list[str]:
@@ -826,6 +837,55 @@ def confined_cwd(requested: str | None) -> str:
     return str(target)
 
 
+#: Every argument that names a file or directory the guard will read or
+#: write, per tool. `repo` is confined by `confined_cwd` and `metrics` by
+#: `_metrics_source`; the globs `verify_guard` matches inside its own
+#: worktree are patterns, not paths. `test_every_tool_argument_is_classified`
+#: fails on any schema property that is in neither this table nor its own
+#: reasoned list of non-paths, so a new path argument cannot arrive unconfined.
+_PATH_ARGUMENTS = {
+    "verify_guard": ("link",),
+    "budget_check": ("design_dir", "tests_dir"),
+    "obsgate_check": ("floor",),
+    "obsgate_snapshot": ("out",),
+    "obsgate_effects": ("before", "after", "floor"),
+    "rounds_check": ("rounds_dir", "doctrine"),
+    "swallow_lint": ("paths", "baseline"),
+    "interpolation_lint": ("paths", "allowlist"),
+    "framework_only": ("guards",),
+}
+
+
+def confine_path_arguments(name: str, arguments: dict, cwd: str) -> None:
+    """Refuse any path argument that resolves outside `confinement_root()`.
+
+    R21-12, found by the outside review of v0.5.2: `obsgate_snapshot` wrote
+    its `out` wherever it pointed - beside the repository, in the review -
+    while this plugin's README told people, before they installed it, that
+    the server reads only paths confined to the repository and writes
+    nothing. `repo` and `metrics` were confined; every other path went
+    straight to the guard. A path is resolved the way the guard will resolve
+    it, against the directory the guard runs in, and symlinks are followed,
+    so a link inside the tree cannot carry a read or a write out of it.
+    """
+    if os.environ.get(ANY_REPO_ENV) == "1":
+        return
+    root = confinement_root()
+    for key in _PATH_ARGUMENTS.get(name, ()):
+        value = arguments.get(key)
+        for item in value if isinstance(value, list) else [value]:
+            if not isinstance(item, str) or not item:
+                continue
+            resolved = (Path(cwd) / item).resolve()
+            if resolved != root and root not in resolved.parents:
+                raise _bad_args(
+                    f"`{key}` {item} resolves to {resolved}, outside {root} - "
+                    f"the repository this server was started in. The guards "
+                    f"this server runs read and write inside it. Use a path in "
+                    f"this repository, or set {ANY_REPO_ENV}=1 if pointing "
+                    f"them elsewhere is what you want.")
+
+
 def public_tools() -> list[dict]:
     """The `tools/list` view: no internals, deterministic order."""
     return [
@@ -874,6 +934,7 @@ def run_tool(name: str, arguments: dict) -> dict:
         )
 
     cwd = confined_cwd(arguments.get("repo"))
+    confine_path_arguments(name, arguments, cwd)
 
     argv = [sys.executable, str(script), *tail]
     timeout = _int(arguments, "timeout_s", default=spec["default_timeout"])
@@ -1118,11 +1179,11 @@ class _Client:
     """A real stdio MCP client over a real subprocess. No shortcuts: the
     selfcheck must exercise the transport, not a function call."""
 
-    def __init__(self, env: dict | None = None) -> None:
+    def __init__(self, env: dict | None = None, cwd: str | None = None) -> None:
         self.proc = subprocess.Popen(
             [sys.executable, "-u", str(Path(__file__).resolve())],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, bufsize=1,
+            stderr=subprocess.PIPE, text=True, bufsize=1, cwd=cwd,
             env=env if env is not None else dict(os.environ),
         )
         self._id = 0
@@ -1220,7 +1281,10 @@ def _selfcheck_body() -> bool:
             '    return conn.execute(f\'SELECT * FROM t WHERE n = "{name}"\')\n'
         )
 
-        client = _Client()
+        # Started in the temp tree, as an installed plugin is started in the
+        # repository it serves: the paths below are then inside the tree the
+        # server confines path arguments to (R21-12).
+        client = _Client(cwd=tmp_s)
         try:
             # 3. Modern era: server/discover is the handshake-free entry point.
             res = client.call("server/discover")

@@ -20,6 +20,8 @@ Usage:
   python obsgate.py check --metrics metrics.txt --floor obs_floor.json
   python obsgate.py check --metrics http://svc/metrics --floor f.json \
                           --samples 3 --interval-ms 500      # frozen-exporter probe
+  python obsgate.py check --metrics http://localhost:9090/metrics --floor f.json \
+                          --redirects refuse   # report a 3xx, never follow it
 
   # 2. snapshot: a deterministic digest of the surface at a moment
   python obsgate.py snapshot --metrics http://svc/metrics --out before.json
@@ -449,13 +451,46 @@ def _payload_has_content(text: str) -> bool:
 
 # ── reading the surface ─────────────────────────────────────────────────────
 
-def read_payload(source: str, timeout: float = 10.0) -> tuple[str | None, str]:
+class _Redirected(Exception):
+    """Raised in place of following a redirect, carrying where it pointed."""
+
+    def __init__(self, code: int, location: str):
+        super().__init__(f"HTTP {code} to {location}")
+        self.code, self.location = code, location
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        fp.close()
+        raise _Redirected(code, newurl)
+
+
+def read_payload(
+    source: str, timeout: float = 10.0, follow_redirects: bool = True
+) -> tuple[str | None, str]:
     """Fetch the metrics text. Returns (text, "") or (None, why) - the
-    caller maps failure to INCONCLUSIVE, never to a pass or a fail."""
+    caller maps failure to INCONCLUSIVE, never to a pass or a fail.
+
+    `follow_redirects=False` answers a redirect instead of following it
+    (R21-11). Whatever decided which host this may read decided it for the
+    FIRST request only while redirects are followed: an allowed server that
+    answers 302 sends the fetch wherever its Location says. The MCP server
+    passes it for a URL a model chose. The CLI's default still follows,
+    because there a person named the URL."""
     if source.startswith(("http://", "https://")):
         try:
-            with urllib.request.urlopen(source, timeout=timeout) as resp:
+            if follow_redirects:
+                resp = urllib.request.urlopen(source, timeout=timeout)
+            else:
+                resp = urllib.request.build_opener(_RefuseRedirects).open(
+                    source, timeout=timeout)
+            with resp:
                 return resp.read().decode("utf-8", errors="replace"), ""
+        except _Redirected as exc:
+            return None, (f"{ENDPOINT}: answered HTTP {exc.code} redirecting to "
+                          f"{exc.location!r}, which was not followed "
+                          f"(--redirects refuse). Point --metrics at the URL "
+                          f"that serves the metrics")
         except (urllib.error.URLError, OSError, ValueError) as exc:
             return None, (f"{ENDPOINT}: unreachable after {timeout:g}s - "
                           f"{type(exc).__name__}: {exc}")
@@ -466,7 +501,8 @@ def read_payload(source: str, timeout: float = 10.0) -> tuple[str | None, str]:
 
 
 def sample_payloads(
-    source: str, samples: int = 1, interval_ms: float = 0.0, timeout: float = 10.0
+    source: str, samples: int = 1, interval_ms: float = 0.0, timeout: float = 10.0,
+    follow_redirects: bool = True,
 ) -> tuple[list, str]:
     """Scrape `samples` times, `interval_ms` apart. Returns (texts, "") or
     ([], why). Any single failed scrape fails the whole read: a partial
@@ -477,7 +513,7 @@ def sample_payloads(
     for i in range(samples):
         if i and interval_ms > 0:
             time.sleep(interval_ms / 1000.0)
-        text, why = read_payload(source, timeout)
+        text, why = read_payload(source, timeout, follow_redirects)
         if text is None:
             return [], (f"{why} (on sample {i + 1} of {samples}; a partial "
                         f"sample set cannot answer the frozen question)")
@@ -549,12 +585,14 @@ def gate(
     timeout: float = 10.0,
     samples: int = 1,
     interval_ms: float = 0.0,
+    follow_redirects: bool = True,
 ) -> FloorResult:
     """One-call form: fetch, parse, check. Library twin of the CLI."""
     doc = load_floor_doc(floor_path)
     surfaces, effects = doc["surfaces"], doc["effects"]
 
-    texts, why = sample_payloads(source, samples, interval_ms, timeout)
+    texts, why = sample_payloads(source, samples, interval_ms, timeout,
+                                 follow_redirects)
     if not texts:
         return FloorResult(
             INCONCLUSIVE,
@@ -1395,8 +1433,9 @@ def _selfcheck_body() -> bool:  # noqa: C901 - a checklist, read top to bottom
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 _SUBCOMMANDS = ("check", "snapshot", "effects")
-_CHECK_FLAGS = {"--metrics", "--floor", "--timeout", "--samples", "--interval-ms"}
-_SNAPSHOT_FLAGS = {"--metrics", "--out", "--timeout"}
+_CHECK_FLAGS = {"--metrics", "--floor", "--timeout", "--samples", "--interval-ms",
+                "--redirects"}
+_SNAPSHOT_FLAGS = {"--metrics", "--out", "--timeout", "--redirects"}
 _EFFECTS_FLAGS = {"--before", "--after", "--floor"}
 _GLOBAL_FLAGS = {"--selfcheck", "--help", "-h"}
 _KNOWN_FLAGS = (_CHECK_FLAGS | _SNAPSHOT_FLAGS | _EFFECTS_FLAGS | _GLOBAL_FLAGS)
@@ -1423,6 +1462,17 @@ def _parse_flags(argv: list, known: set) -> dict:
     return out
 
 
+def _follow_redirects(flags: dict) -> bool:
+    """`--redirects follow` (the default) or `--redirects refuse`. Anything
+    else is refused rather than read as either, because a misspelt refusal
+    that quietly followed would be the one outcome the flag exists to stop."""
+    mode = flags.get("--redirects", "follow")
+    if mode not in ("follow", "refuse"):
+        raise UsageError(
+            f"{INSTRUMENT}: --redirects must be follow or refuse, got {mode!r}")
+    return mode == "follow"
+
+
 def _cmd_snapshot(argv: list) -> int:
     flags = _parse_flags(argv, _SNAPSHOT_FLAGS)
     source, out = flags.get("--metrics"), flags.get("--out")
@@ -1431,8 +1481,9 @@ def _cmd_snapshot(argv: list) -> int:
             f"{INSTRUMENT}: snapshot needs --metrics <file-or-url> and --out "
             f"<snap.json>")
     timeout = float(flags.get("--timeout", 10.0))
+    follow = _follow_redirects(flags)
 
-    text, why = read_payload(source, timeout)
+    text, why = read_payload(source, timeout, follow)
     if text is None:
         print(f"[obsgate] {why} - no snapshot written; a snapshot of nothing "
               f"would diff cleanly against anything", file=sys.stderr)
@@ -1484,11 +1535,12 @@ def _cmd_check(argv: list) -> int:
     timeout = float(flags.get("--timeout", 10.0))
     samples = int(flags.get("--samples", 1))
     interval_ms = float(flags.get("--interval-ms", 0.0))
+    follow = _follow_redirects(flags)
 
     if not selfcheck():
         return 1
     try:
-        result = gate(source, floor_path, timeout, samples, interval_ms)
+        result = gate(source, floor_path, timeout, samples, interval_ms, follow)
     except ValueError as exc:
         print(f"[obsgate] {exc}", file=sys.stderr)
         return 2

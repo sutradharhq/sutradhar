@@ -76,7 +76,7 @@ Read this before installing. It is short because the answer is short.
 |---|---|---|---|---|
 | pre-commit gate (three lints) | your working tree | nothing | no | no |
 | `Stop` hook | HEAD's commit message | a marker in your temp dir; a throwaway worktree, removed after | **yes** — the trailer, only on a commit not yet on any remote | no |
-| MCP server, eight guard tools | the paths you pass, confined to this repo | nothing | no | **only `obsgate`** — loopback, or a host you allow |
+| MCP server, eight guard tools | the paths you pass, confined to this repo | `obsgate_snapshot`'s `out`, confined to this repo; the full text of a truncated result, in your temp dir | no | **only `obsgate`** — loopback without following a redirect, or a host you allow |
 | MCP server, `verify_guard` | a throwaway worktree | that worktree | **yes** — the command the agent passes | no |
 
 The **yes** cells are the whole risk. Both go through a parser:
@@ -113,12 +113,15 @@ The full statement, including what we found in our own audit and when, is in
   anything in your repository.
 - **It is quiet.** The `Stop` hook says nothing on a turn with nothing to
   report, and reports a given HEAD at most once per session.
-- **It will not run a `Guard-cmd:` trailer somebody else wrote.** The
-  `Stop` hook runs a trailer only when HEAD's author email matches your
-  `git config user.email`. Checking out a pull request is otherwise enough
-  to let its author choose a command that runs on your machine. When the
-  author is somebody else, the hook says whose commit it is and prints the
-  one-line command to run it yourself.
+- **It will not run a `Guard-cmd:` trailer that arrived from somewhere
+  else.** The `Stop` hook runs a trailer only when HEAD is not yet on any
+  remote - your own unpushed work - and HEAD's author email matches your
+  `git config user.email`. The remote check is the control: a fetch, a pull
+  or a checked-out pull request cannot make HEAD local and unpushed. The
+  author check is only a speed bump for a colleague's commit you
+  cherry-picked, because anyone can set an author email to yours. When
+  either says no, the hook prints the one-line command to run it yourself.
+  `SUTRADHAR_RUN_TRAILERS=1` runs trailers regardless.
 
 ## Pointing it at guards you copied in
 

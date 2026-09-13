@@ -19,10 +19,13 @@ commit message the input to this hook. Round 16 answered that by running
 the trailer only when HEAD's author email matched `git config user.email`.
 Round 20's review showed that gate is decoration: an author email is
 self-asserted, unverified and public, so a hostile commit sets it to yours
-(R20-5). So by default the hook runs NOTHING a commit chose. It reports the
-trailer and prints the command to run by hand. `SUTRADHAR_RUN_TRAILERS=1`
-opts a tree you control back into auto-run, with the author check kept as a
-speed bump and named as such.
+(R20-5). So the hook runs a trailer only when HEAD is on no remote-tracking
+ref - local, unpushed work, which nothing fetched or checked out can be -
+and still compares the author email, as a speed bump for a colleague's
+commit you cherry-picked, named as one. Anything else is reported with the
+command to run by hand. `SUTRADHAR_RUN_TRAILERS=1` runs trailers
+regardless. (An earlier draft of that fix ran no trailer at all by default.
+It never shipped, and this paragraph described it until R21-13.)
 
 | HEAD                              | verdict      | what happens                  |
 |-----------------------------------|--------------|-------------------------------|
@@ -294,15 +297,15 @@ def check(payload: dict) -> None:
                 + (" ..." if len(prod) > 5 else ""))
         H.allow_silently()
 
-    # The default path never executes a trailer. A Stop hook fires at the end
-    # of every turn, and the HEAD it reads is whatever is checked out - a
-    # pulled branch, a contributor's PR, a merge. The earlier gate ran the
-    # trailer when HEAD's author email matched the local `user.email`, and
-    # that control was decoration: an author email is self-asserted and
-    # public, so a hostile commit sets it to yours and passes (R20-5). The
-    # honest shape is to report the trailer and hand over the command, and
-    # to execute nothing chosen by a commit unless the person running this
-    # tree has said so out loud with SUTRADHAR_RUN_TRAILERS=1.
+    # Which trailers run. A Stop hook fires at the end of every turn, and the
+    # HEAD it reads is whatever is checked out - a pulled branch, a
+    # contributor's PR, a merge. The earlier gate ran the trailer when HEAD's
+    # author email matched the local `user.email`, and that control was
+    # decoration: an author email is self-asserted and public, so a hostile
+    # commit sets it to yours and passes (R20-5). The control now is whether
+    # HEAD is on any remote, because nothing a fetch or a checkout brings in
+    # is local and unpushed. SUTRADHAR_RUN_TRAILERS=1 skips both checks, said
+    # out loud by the person running this tree.
     forced = os.environ.get(RUN_TRAILERS_ENV) == "1"
     published = came_from_a_remote(cwd)
     if not forced and published is not False:

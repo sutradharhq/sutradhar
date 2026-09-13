@@ -73,8 +73,11 @@ agent. Treat the tool accordingly:
 - **Do not allowlist it** in Claude Code's permissions. Let it prompt. A
   developer who allowlists `verify_guard` thinking "it runs my tests" has
   allowlisted arbitrary execution by the agent.
-- The `repo` argument is confined to the git repository the server was
-  started in. `SUTRADHAR_MCP_ANY_REPO=1` lifts that, deliberately, by you.
+- The `repo` argument, and every other argument that names a file or
+  directory - `obsgate_snapshot`'s `out` among them - is confined to the git
+  repository the server was started in, resolved the way the guard will
+  resolve it and with symlinks followed. `SUTRADHAR_MCP_ANY_REPO=1` lifts
+  that, deliberately, by you. Until v0.5.2 only `repo` and `metrics` were.
 - **One guard reaches the network, and only where you point it.**
   `obsgate` reads Prometheus text from a file or an http(s) URL; that is
   its job. Through the MCP server, where the argument comes from a model,
@@ -84,9 +87,12 @@ agent. Treat the tool accordingly:
   from anything a model read in a tool result. The host checked is the one
   a standard URL parser reads, a URL carrying user-info (`anything@`) is
   refused, and the URL handed to `obsgate` is rebuilt from the parts that
-  were checked, so what is fetched is what was judged. Until v0.5.2 the
-  check read the host with its own pattern, and
-  `http://localhost:1@169.254.169.254/` passed it; see the changelog. The
+  were checked, so what is fetched is what was judged. A redirect is
+  reported, not followed, because a check on the URL is otherwise a check
+  on the first request only. Until v0.5.2 the check read the host with its
+  own pattern, `http://localhost:1@169.254.169.254/` passed it, and an
+  allowed loopback server could redirect the fetch anywhere; see the
+  changelog. The
   `obsgate` CLI is not restricted; this bounds what a MODEL can reach, not
   what you can.
 

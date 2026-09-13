@@ -10,8 +10,8 @@ upgrade by diffing against the tag they took.
 ## v0.5.2 - 2026-09-13
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP
-server's loopback check could be talked past** (round 21, R21-1, R21-9 and
-R21-10; the second found by an outside review before this tag).
+server let a model reach further than it said** (round 21: R21-1, and
+R21-9 to R21-13, which an outside review found before this tag).
 
 - `plugin/.claude-plugin/plugin.json` declared `"version": "0.3.0"` from
   the day the plugin was added, and nobody bumped it. Claude Code uses that
@@ -33,10 +33,12 @@ R21-10; the second found by an outside review before this tag).
   of its own that stopped at the first `:`, so
   `http://localhost:1@169.254.169.254/` read as `localhost` and was
   allowed. RFC 3986 reads that host as 169.254.169.254. Witnessed on
-  Python 3.9.6: with no proxy, Python's fetcher tried to resolve the whole
-  `localhost:1@169.254.169.254` and failed; with an HTTP proxy configured,
-  the URL reached the proxy intact, and which host gets contacted is then
-  the proxy's reading. The host is now read by the standard parser,
+  Python 3.9.6, 3.12 and 3.13: with no proxy, Python's fetcher never
+  reached that host - it rejected `1@169.254.169.254` as a port, and for a
+  spelling with a port after the host it tried to resolve the whole
+  authority as a name and failed; with an HTTP proxy configured, the URL
+  reached the proxy intact, and which host gets contacted is then the
+  proxy's reading. The host is now read by the standard parser,
   user-info is refused, and the URL `obsgate` receives is rebuilt from the
   checked parts. A test walks a grid of spellings and demands that every
   URL the check accepts lands on loopback by the standard parser and by the
@@ -47,6 +49,34 @@ R21-10; the second found by an outside review before this tag).
   have skipped a newer release spelled `## 0.6.0` or `## [0.6.0]` and
   passed (R21-10). The README and CITATION no longer say every rule was
   paid for by a defect: most were, and the rest are labelled practice.
+- **The loopback check governed the first request only** (R21-11).
+  `obsgate` fetched with `urlopen`, which follows redirects, so an allowed
+  loopback server answering 302 sent the fetch to whatever its Location
+  named - another port, a name, the metadata address - with a connection
+  attempted each time. `obsgate check` and `snapshot` take a new
+  `--redirects follow|refuse`; `refuse` reports the Location as
+  INCONCLUSIVE and fetches nothing more. The MCP server passes `refuse` for
+  every URL a model chose unless `SUTRADHAR_MCP_ANY_URL=1`. The CLI's
+  default still follows, because a person named the URL. Cost: a metrics
+  endpoint that redirects has to be named by its final URL through the MCP
+  server, and the message says which one.
+- **Path arguments other than `repo` and `metrics` were not confined**
+  (R21-12). `obsgate_snapshot` wrote its `out` wherever it pointed, and
+  `floor`, `before`, `after`, `design_dir`, `tests_dir`, `rounds_dir`,
+  `doctrine`, `paths`, `baseline`, `allowlist`, `guards` and `link` went
+  to the guard unchecked, while the plugin README said the server reads
+  only paths in the repository and writes nothing. Every path argument is
+  now resolved against the directory the guard runs in, symlinks followed,
+  and refused outside the repository unless `SUTRADHAR_MCP_ANY_REPO=1`. A
+  test fails on any tool argument that is neither a confined path nor on a
+  reasoned list of non-paths, so a new one cannot arrive unconfined. The
+  README's table now says what the server does write.
+- **Three descriptions of the `Stop` hook described a gate that no longer
+  exists** (R21-13): the plugin README and the design note still said a
+  trailer runs when the author email matches, and the hook's own docstring
+  said it runs nothing by default. All three now say what ships: a trailer
+  runs only when HEAD is on no remote and its author email matches yours,
+  the second check a speed bump, and `SUTRADHAR_RUN_TRAILERS=1` skips both.
 - This file gained the v0.5.0 and v0.5.1 headings it should have had at
   each tag, and v0.5.1's entry is corrected below.
 
@@ -62,7 +92,8 @@ R20-8; found by an independent review after the tag).
 
 - **The `Stop` hook runs a `Guard-cmd:` trailer only when HEAD is not yet
   on any remote** - your own unpushed work, which is what it exists to
-  check. The round-16 gate that ran it when HEAD's author email matched
+  check - and the author email still matches yours, kept only as a speed
+  bump. The round-16 gate that ran it when HEAD's author email matched
   yours was decoration: an author email is self-asserted and public, so a
   hostile commit sets it to yours and checking out the branch was enough.
   Anything that arrived by a fetch, a pull or a checkout is reported with
