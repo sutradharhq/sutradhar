@@ -75,8 +75,9 @@ agent. Treat the tool accordingly:
   allowlisted arbitrary execution by the agent.
 - The `repo` argument, and every other argument that names a file or
   directory - `obsgate_snapshot`'s `out` among them - is confined to the git
-  repository the server was started in, resolved the way the guard will
-  resolve it and with symlinks followed. `SUTRADHAR_MCP_ANY_REPO=1` lifts
+  repository the server was started in, resolved against the directory the
+  guard runs in and with symlinks followed. No argument may begin with `-`,
+  because a guard would read it as one of its own options. `SUTRADHAR_MCP_ANY_REPO=1` lifts
   that, deliberately, by you. Until v0.5.2 only `repo` and `metrics` were.
 - **One guard reaches the network, and only where you point it.**
   `obsgate` reads Prometheus text from a file or an http(s) URL; that is

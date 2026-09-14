@@ -253,6 +253,26 @@ def _string(args: dict, key: str, *, required: bool = False,
     value = args[key]
     if not isinstance(value, str) or not value:
         raise _bad_args(f"argument {key!r} must be a non-empty string, got {value!r}")
+    return _not_an_option(key, value)
+
+
+def _not_an_option(key: str, value: str) -> str:
+    """Refuse a value a guard would read as one of its own options.
+
+    R21-16, found by the outside review of v0.5.2. Every value here lands in
+    a guard's argv, and the guards read flags by membership: `paths` of
+    `["--update-baseline", "src"]` made `swallow_lint` rewrite the ratchet's
+    baseline from inside the loop it exists to hold, and `commit="--help"`
+    made `verify_guard` print its usage, exit 0, and come back VERIFIED.
+    Confinement could not see either: `--update-baseline` resolves inside
+    the repository. No value any tool takes begins with a dash, and a path
+    that really does can be written `./-name`.
+    """
+    if value.startswith("-"):
+        raise _bad_args(
+            f"argument {key!r} is {value!r}, which begins with '-': the guard "
+            f"would read it as one of its own options, not as a value. A path "
+            f"that really begins with a dash can be written ./{value}.")
     return value
 
 
@@ -270,7 +290,7 @@ def _string_list(args: dict, key: str, *, required: bool = False) -> list[str]:
         raise _bad_args(f"argument {key!r} must be an array of non-empty strings")
     if required and not value:
         raise _bad_args(f"argument {key!r} must name at least one path")
-    return value
+    return [_not_an_option(key, item) for item in value]
 
 
 def _int(args: dict, key: str, *, default: int | None = None) -> int | None:
@@ -525,6 +545,7 @@ TOOLS: tuple[dict, ...] = (
             "nothing. INCONCLUSIVE = could not tell, never a pass. SLOW."
         ),
         "argv": _argv_verify_guard,
+        "json_verdict": True,
         "result_codes": {0: "VERIFIED", 1: "DECORATION", 2: "INCONCLUSIVE"},
         "default_timeout": 900,
         "inputSchema": {
@@ -897,6 +918,23 @@ def public_tools() -> list[dict]:
 
 # ── running a guard ─────────────────────────────────────────────────────────
 
+def _json_verdict(stdout: str) -> object:
+    """The verdict in the JSON object a guard printed with `--json`, or None.
+
+    The object is printed indented, so it begins on a line that starts with
+    `{`; parsing from the LAST such line leaves any progress text above it
+    out of the way."""
+    lines = stdout.splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].startswith("{"):
+            try:
+                payload = json.loads("\n".join(lines[i:]))
+            except ValueError:
+                return None
+            return payload.get("verdict") if isinstance(payload, dict) else None
+    return None
+
+
 def run_tool(name: str, arguments: dict) -> dict:
     """Run one guard through its REAL CLI and classify the outcome.
 
@@ -976,6 +1014,24 @@ def run_tool(name: str, arguments: dict) -> dict:
             stdout=out, stderr=err,
             command=" ".join(shlex.quote(a) for a in argv),
         )
+
+    if spec.get("json_verdict"):
+        # R21-16, and 6.7: an exit code is not a witness. `verify_guard`
+        # exits 0 for `--help` as well as for VERIFIED, and a flag-shaped
+        # `commit` once turned its usage text into a VERIFIED result. This
+        # server asked for `--json`, so it requires that JSON, and a verdict
+        # in it that agrees with the exit code - or it reports no verdict.
+        said = _json_verdict(proc.stdout or "")
+        if said != verdict:
+            raise InstrumentError(
+                f"{name} exited {proc.returncode}, which would mean {verdict}, "
+                f"but it did not print the JSON verdict this server asked for"
+                + (f" - the JSON it printed says {said!r}" if said else "")
+                + ". An exit code alone is not a verdict, so none is reported.",
+                tool=name, exit_code=proc.returncode, json_verdict=said,
+                stdout=out, stderr=err,
+                command=" ".join(shlex.quote(a) for a in argv),
+            )
 
     # The cut is stated AND the whole thing is kept. A partial finding list
     # read as a complete one is worse than no list, and "re-run it yourself"

@@ -11,7 +11,7 @@ remembers the guards exist.
 | `hooks/hooks.json` -> `scripts/verify_before_done.py` | On `Stop`: if HEAD carries a `Guard-cmd:` trailer, asks `verify_guard` whether that guard is real. DECORATION blocks the turn from ending; INCONCLUSIVE is reported as inconclusive and never as a pass |
 | `.mcp.json` | Registers `guards/mcp_server.py` so the nine guards are callable as tools mid-task |
 | `guards/` | The guard programs the hooks and the MCP server run |
-| `skills/` | Wrappers for the two canonical skills in `agent/skills/` |
+| `skills/` | Wrappers for the two canonical skills in `agent/skills/`. They read that file from a Sutradhar checkout; an installed copy does not carry it yet, and the skill says so rather than improvise |
 
 ## Install
 
@@ -74,7 +74,7 @@ Read this before installing. It is short because the answer is short.
 
 | component | reads | writes | runs your commands | network |
 |---|---|---|---|---|
-| pre-commit gate (three lints) | your working tree | nothing | no | no |
+| pre-commit gate (four guards) | your working tree | nothing | no | no |
 | `Stop` hook | HEAD's commit message | a marker in your temp dir; a throwaway worktree, removed after | **yes** — the trailer, only on a commit not yet on any remote | no |
 | MCP server, eight guard tools | the paths you pass, confined to this repo | `obsgate_snapshot`'s `out`, confined to this repo; the full text of a truncated result, in your temp dir | no | **only `obsgate`** — loopback without following a redirect, or a host you allow |
 | MCP server, `verify_guard` | a throwaway worktree | that worktree | **yes** — the command the agent passes | no |

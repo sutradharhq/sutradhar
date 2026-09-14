@@ -11,7 +11,8 @@ upgrade by diffing against the tag they took.
 
 **SECURITY: v0.5.1's fix never reached an installed plugin, and the MCP
 server let a model reach further than it said** (round 21: R21-1, and
-R21-9 to R21-13, which an outside review found before this tag).
+R21-9 to R21-13 and R21-16, which an outside review found before this tag;
+record: `docs/rounds/round-021.md`, which lands after the tag).
 
 - `plugin/.claude-plugin/plugin.json` declared `"version": "0.3.0"` from
   the day the plugin was added, and nobody bumped it. Claude Code uses that
@@ -77,6 +78,23 @@ R21-9 to R21-13, which an outside review found before this tag).
   said it runs nothing by default. All three now say what ships: a trailer
   runs only when HEAD is on no remote and its author email matches yours,
   the second check a speed bump, and `SUTRADHAR_RUN_TRAILERS=1` skips both.
+- **A tool argument could be read as the guard's own option** (R21-16).
+  The guards read their flags by membership, and nothing stopped a value
+  from being one. Through the MCP server, `paths` of
+  `["--update-baseline", "src"]` made `swallow_lint` rewrite its baseline -
+  the agent under the ratchet raising its own floor - and `commit="--help"`
+  made `verify_guard` print its usage, exit 0, and come back VERIFIED.
+  Confinement could not see it: `--update-baseline` resolves inside the
+  repository. Every string argument that begins with `-` is now refused (a
+  path that really does can be written `./-name`), and `verify_guard`'s
+  verdict is reported only when the JSON it was asked for agrees with its
+  exit code. A test hands every string and list argument of every tool a
+  flag and requires each to be refused before anything runs.
+- **Known, not fixed in this release** (R21-17): the plugin's two skills
+  read their procedure from `agent/skills/` in a Sutradhar checkout. An
+  installed copy does not carry that directory, so the skill says the file
+  is missing rather than improvise. The plugin README now says so, and the
+  fix follows this release.
 - This file gained the v0.5.0 and v0.5.1 headings it should have had at
   each tag, and v0.5.1's entry is corrected below.
 

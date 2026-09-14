@@ -1037,3 +1037,94 @@ def test_obsgate_snapshot_writes_nothing_outside_the_repository(tmp_path):
     assert refused["error"]["code"] == INVALID_PARAMS, refused
     assert not beside.exists(), "the refused snapshot was written anyway"
     assert "error" not in written and (repo / "snap.json").is_file(), written
+
+
+# ── R21-16: no argument may be read as the guard's own option ────────────────
+
+def test_no_argument_value_can_become_a_guard_option(monkeypatch):
+    """R21-16 as a class. Every string or list argument of every tool lands in
+    a guard's argv, and the guards read their flags by membership, so a value
+    beginning with `-` is an option in disguise. The review found two - a
+    `paths` entry of `--update-baseline` and a `commit` of `--help` - and a
+    test of those two would leave the other thirty-odd to chance. Each is
+    refused as a caller error before anything is spawned."""
+    from sutradhar_guards.mcp_server import (
+        ANY_REPO_ENV, ANY_URL_ENV, RpcError, run_tool)
+
+    monkeypatch.delenv(ANY_REPO_ENV, raising=False)
+    monkeypatch.delenv(ANY_URL_ENV, raising=False)
+    checked = []
+    for tool in TOOLS:
+        for key, schema in tool["inputSchema"]["properties"].items():
+            if schema.get("type") not in ("string", "array"):
+                continue
+            for value in ("--help", "--update-baseline", "-h"):
+                with pytest.raises(RpcError) as caught:
+                    run_tool(tool["name"], _arguments_with(tool, key, value))
+                assert caught.value.code == INVALID_PARAMS, (
+                    tool["name"], key, value, caught.value.message)
+            checked.append(f"{tool['name']}.{key}")
+    assert len(checked) >= 30, checked
+
+
+def test_a_model_cannot_rewrite_the_swallow_baseline_through_paths(tmp_path):
+    """The reviewer's case through the real server: `--update-baseline` in
+    `paths` is refused, and the ratchet's floor is the bytes it was before."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text(
+        "def f():\n    try:\n        return 1\n    except Exception:\n        return None\n")
+    baseline = tmp_path / "swallow_baseline.json"
+    baseline.write_text('{"floor": 0}\n')
+    s = Server(cwd=tmp_path)
+    try:
+        res = s.call_tool("swallow_lint", {"paths": ["--update-baseline", "src"],
+                                           "baseline": "swallow_baseline.json"})
+    finally:
+        s.close()
+    assert res["error"]["code"] == INVALID_PARAMS, res
+    assert baseline.read_text() == '{"floor": 0}\n', "the baseline was rewritten"
+
+
+def _fake_verify_guard(tmp_path: Path, body: str) -> Path:
+    fake = tmp_path / "fake-guards"
+    fake.mkdir()
+    (fake / "verify_guard.py").write_text(body)
+    return fake
+
+
+@pytest.mark.parametrize("label, body", [
+    ("usage text and exit 0",
+     'print("verify_guard - usage")\nraise SystemExit(0)\n'),
+    ("a JSON verdict that disagrees with the exit code",
+     'import json\nprint(json.dumps({"verdict": "DECORATION"}, indent=2))\n'
+     'raise SystemExit(0)\n'),
+], ids=["usage-text", "disagreeing-json"])
+def test_verify_guard_exit_0_without_its_json_verdict_is_no_verdict(tmp_path, label, body):
+    """R21-16's second half, and 6.7: an exit code is not a witness. The
+    server asks `verify_guard` for `--json`; exit 0 with no JSON verdict, or
+    with one that says something else, is reported as no verdict at all."""
+    fake = _fake_verify_guard(tmp_path, body)
+    s = Server(cwd=tmp_path, env_extra={"SUTRADHAR_MCP_GUARD_DIR": str(fake)})
+    try:
+        res = s.call_tool("verify_guard", {"guard_cmd": "python3 -c pass"})
+    finally:
+        s.close()
+    assert "result" not in res, (label, res)
+    assert res["error"]["code"] == INTERNAL_ERROR, (label, res)
+
+
+def test_verify_guard_json_verdict_is_reported_when_it_agrees(tmp_path):
+    """The pair (6.7): the same stand-in printing the JSON verdict its exit
+    code means, after a progress line, is a VERIFIED result - or the refusals
+    above could be refusing everything."""
+    body = ('import json\nprint("[verify-guard] progress")\n'
+            'print(json.dumps({"verdict": "VERIFIED", "exit_code": 0}, indent=2))\n'
+            'raise SystemExit(0)\n')
+    fake = _fake_verify_guard(tmp_path, body)
+    s = Server(cwd=tmp_path, env_extra={"SUTRADHAR_MCP_GUARD_DIR": str(fake)})
+    try:
+        res = s.call_tool("verify_guard", {"guard_cmd": "python3 -c pass"})
+    finally:
+        s.close()
+    assert "error" not in res, res
+    assert res["result"]["structuredContent"]["verdict"] == "VERIFIED", res
