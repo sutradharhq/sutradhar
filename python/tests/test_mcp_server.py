@@ -285,7 +285,7 @@ def test_another_guards_exit_2_arrives_as_an_instrument_failure(server_in_tmp, t
 
 
 def test_a_lint_that_scanned_nothing_says_so_instead_of_blaming_the_server(
-        server, tmp_path):
+        server_in_tmp, tmp_path):
     """R21-2 across the transport. A path holding no Python file used to come
     back as a verdict of OK. It is now the guard's exit 2 - still no verdict,
     so still an error - and the error leads with the guard's own sentence.
@@ -294,9 +294,9 @@ def test_a_lint_that_scanned_nothing_says_so_instead_of_blaming_the_server(
     empty = tmp_path / "no-python"
     empty.mkdir()
     (empty / "README.md").write_text("docs only\n")
-    res = server.call_tool("swallow_lint", {
+    res = server_in_tmp.call_tool("swallow_lint", {
         "paths": [str(empty)], "baseline": str(tmp_path / "none.json"),
-        "repo": str(REPO_ROOT)})
+        "repo": str(tmp_path)})
     assert "result" not in res, (
         f"a lint that read no file returned the verdict "
         f"{res.get('result', {}).get('structuredContent', {}).get('verdict')!r}")
@@ -1086,6 +1086,14 @@ def test_no_argument_value_can_become_a_guard_option(monkeypatch):
                     run_tool(tool["name"], _arguments_with(tool, key, value))
                 assert caught.value.code == INVALID_PARAMS, (
                     tool["name"], key, value, caught.value.message)
+                # Refused for the right reason. `repo` is the one argument
+                # most tools never place in argv - it only sets the cwd - so
+                # there `confined_cwd` refusing a directory that does not
+                # exist is the refusal that runs first, and it is also right.
+                message = caught.value.message
+                assert "begins with '-'" in message or (
+                    key == "repo" and "not a directory" in message), (
+                    tool["name"], key, value, message)
             checked.append(f"{tool['name']}.{key}")
     assert len(checked) >= 30, checked
 

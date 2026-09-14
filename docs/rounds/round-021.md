@@ -11,9 +11,10 @@ its guard in the same commit, and the register gained twenty-one rows, of
 which nineteen are decided and two deferred with reasons.
 
 The first finding, R21-1, landed before the rest of the round at `5c8c0c5`
-and is recorded here rather than redone. R21-9 to R21-13 are reserved for
-the maintainer: they landed on main for the v0.5.2 release, and this branch
-is rebased onto that work.
+and is recorded here rather than redone. R21-9 to R21-13 and R21-16 landed on
+main for the v0.5.2 release, each found by the outside review that held that
+tag until it was fixed; this branch is rebased onto that work. R21-17 was
+confirmed during that review and is fixed here, after the tag.
 
 ## Findings
 
@@ -27,16 +28,16 @@ is rebased onto that work.
 | R21-6 | high | 6.6 | Thread-A and Thread-F, independently | fixed | two adopting trees ran copies of a guard missing an injection detection this repository had added weeks earlier, and nothing in either tree could say which release it held. `bootstrap.sh` now writes `.sutradhar-bootstrap` - release and sha256 per placed file - and `bootstrap.sh --check` reports each current, stale, modified locally or missing, offline, from any checkout; `--track` starts a record in an older tree |
 | R21-7 | med | 2.2 | Thread-M's mutation harness | fixed | `verify_guard` certified any red, so a revert that broke a neighbour while the test written for the fix kept passing came back VERIFIED. `--expect <test-id>` now requires every named test among the failures the runner reports; a red elsewhere names what went red; output naming no test is INCONCLUSIVE |
 | R21-8 | low | 8.1 | the backflow register | fixed | twenty-one register items arrived this round and nineteen are decided in it: sixteen adopted, three rejected with reasons, two deferred to round 23 with reasons. Five doctrine edits, each inside an existing rule; 49 rules before and after, no id moved |
-| R21-9 | low | - | - | fixed | placeholder: landed on main in the v0.5.2 release; recorded by the maintainer |
-| R21-10 | low | - | - | fixed | placeholder: landed on main in the v0.5.2 release; recorded by the maintainer |
-| R21-11 | low | - | - | fixed | placeholder: landed on main in the v0.5.2 release; recorded by the maintainer |
-| R21-12 | low | - | - | fixed | placeholder: landed on main in the v0.5.2 release; recorded by the maintainer |
-| R21-13 | low | - | - | fixed | placeholder: landed on main in the v0.5.2 release; recorded by the maintainer |
+| R21-9 | high | 2.3 | the outside review of v0.5.2, first pass | fixed | the MCP server's loopback check for `obsgate`'s `metrics` read the host with a pattern of its own that stopped at the first `:`, so `http://localhost:1@169.254.169.254/` read as `localhost` and was allowed, where RFC 3986 reads the host as 169.254.169.254. Refuted before fixing, on Python 3.9.6, 3.12 and 3.13: with no proxy the fetcher never reached that host; with an HTTP proxy the URL reached the proxy intact. The host is now read by the standard parser, user-info is refused, and the URL handed on is rebuilt from the checked parts. A grid of 12,800 spellings and the reviewer's payload through the real server; ten mutants. Landed at `13da8cc` |
+| R21-10 | low | 3.7 | the outside review of v0.5.2, first pass | fixed | the version test read only `## vX.Y.Z` headings, so a newer release spelled `## 0.6.0` or `## [0.6.0]` was skipped and stale strings passed; and it never read `CITATION.cff` (0.4.0) or the browser probe's `serverInfo` (0.2.0). Every `## ` heading must now read as a release or be Unreleased, and four version strings must agree with the newest. Landed at `13da8cc` |
+| R21-11 | high | 3.6 | the outside review of v0.5.2, second pass | fixed | the loopback check judged the URL while `obsgate` followed redirects, so an allowed loopback server answering 302 sent the fetch to another port, a name, or the metadata address. `obsgate check` and `snapshot` gained `--redirects`, taking `follow` or `refuse`, and the MCP server passes `refuse` unless any host is allowed. Tests count requests at a real target; six mutants. Landed at `9ee22ad` |
+| R21-12 | high | 7.2 | the outside review of v0.5.2, second pass | fixed | only `repo` and `metrics` were confined: `obsgate_snapshot` wrote its `out` beside the repository while the plugin README said the server writes nothing, and twelve other path arguments reached the guards unchecked. Every declared path argument is resolved against the directory the guard runs in, symlinks followed, and refused outside the repository; a classification test fails on any tool argument that is neither a confined path nor a reasoned non-path. Seven mutants, one of them the server's own selfcheck. Landed at `9ee22ad` |
+| R21-13 | low | 7.2 | the outside review of v0.5.2, second pass | fixed | the plugin README, the hooks design note, and the `Stop` hook's own docstring and comment described the retired author-email gate, or the run-nothing draft that never shipped. Prose, corrected against `verify_before_done.py`; no guard, because a test pinning a sentence would count strings (3.6). Landed at `9ee22ad` |
 | R21-14 | med | 2.9 | adding `--expect` (R21-7) | fixed | `verify_guard`'s CLI skipped any argument it did not know, so a typo such as `--gaurd-paths` ran a different verification from the one asked for and still returned a verdict - and would have silently dropped a mistyped `--expect`. A flag with no value raised IndexError and a non-integer `--timeout` raised ValueError, each exiting 1, which is DECORATION's code. Measured before the fix: both exited 1. All are now INCONCLUSIVE, exit 2, naming the argument |
 | R21-15 | low | 3.7 | a real `--json` run while testing R21-7 | deferred | `verify_guard` warned that `calc.py` "may be the guard itself" for the guard command `pytest tests/test_calc.py`: `path in guard_cmd` is a bare substring test that runs before the token-boundary regex beside it. `test_guard_collision_warning_does_not_fire_on_substrings` is named for exactly this case and its guard command, `tests/check_real.py`, contains no substring of `calc.py`, so it cannot fail on it. A warning, never a verdict, and not fixed this round |
-
-The severities of R21-9 to R21-13 are placeholders the parser requires; the
-maintainer sets them with the rows.
+| R21-16 | high | 2.8 | the outside review of v0.5.2, third pass | fixed | a tool argument could be read as the guard's own option, because the guards read their flags by membership: `paths` of `["--update-baseline", "src"]` made `swallow_lint` rewrite its baseline from inside the loop it holds, and `commit="--help"` made `verify_guard` exit 0 over its usage text and come back VERIFIED. Confinement could not see either. `_string` and `_string_list` now refuse a value beginning with `-`, and `verify_guard`'s verdict is reported only when the JSON it was asked for agrees with its exit code. A class test hands every string and list argument of every tool a flag; seven mutants. Landed at `3f8089f` |
+| R21-17 | med | 2.3 | read by this round's agent; confirmed against the skills docs by the maintainer and by the outside review | fixed | both skill wrappers told Claude to read `${CLAUDE_PLUGIN_ROOT}/../agent/skills/<name>.md`, and an installed plugin is copied without `agent/`, so every marketplace user's invocation of either skill reported the file missing. Round 16 recorded that as a deliberate exception to R16-1, and a test pinned the path. This revokes the exception: `plugin/sync_guards.py` copies each canonical body beside its wrapper, byte-identical; the wrappers read the copy; the outside-reference ratchet now covers `SKILL.md`; and a test copies `plugin/` alone, as an install does, and requires every path a wrapper names to exist in the copy |
+| R21-18 | low | 6.11 | the outside review of v0.5.2, fourth pass | deferred | through the MCP server, the eight tools without a JSON verdict map exit 1 to a red verdict, and Python exits 1 on an uncaught exception: `swallow_lint` given a baseline of the wrong shape raised `TypeError` and came back `FINDINGS (exit 1)`, `isError: false`, with the traceback in `stderr`. Red is the safe direction and the traceback is attached, so nothing passes that should not, but a guard that crashed has not reported anything, and the word says it has. Deferred to round 22 together with the NUL-byte message below: both are the adapter naming the wrong party (6.8), and both change how every tool's failure is worded, which is a change to make once and with its own review |
 
 ## What each register item became
 
@@ -249,8 +250,19 @@ the run. Each result below is red on the intended test.
 | R21-7 | `verify_guard.py:548`, unittest reds appended to passes | three unittest VERIFIED cases and the id-reader case | `521f7a23…779cfdb4a` |
 | R21-7 | `verify_guard.py:1166`, `expected.append` -> `expected.clear()` | `test_expect_reaches_the_verdict_through_the_cli` | `521f7a23…779cfdb4a` |
 
+| R21-17 | `plugin/skills/robustness-loop/SKILL.md`, the path back to `${CLAUDE_PLUGIN_ROOT}/../agent/skills/` | `test_every_path_a_skill_names_exists_in_an_installed_copy`, the outside-reference ratchet, `test_every_canonical_skill_has_a_plugin_wrapper` | matched |
+| R21-17 | `plugin/sync_guards.py`, `"ops-drill.md"` dropped from `SKILLS` and its bundled copy deleted | the installed-copy test, the wrapper ratchet, the drift test | matched, deleted file restored |
+| R21-17 | `plugin/skills/ops-drill/ops-drill.md`, one heading edited so the copy drifts | the wrapper ratchet, `test_sync_guards_check_agrees_with_this_file` | matched |
+| R21-17 | `plugin/sync_guards.py`, `_pairs` returns the guards only | `test_sync_guards_sees_a_drifted_skill_body` | matched |
+
 R21-8 changed text and no mechanism, so it has no line to mutate; the register
 gate that holds it carries its own planted overdue item and ran green.
+
+R21-9 to R21-12 and R21-16 were mutation-verified on main before the v0.5.2
+tag, in the same discipline - a line that runs, a fresh bytecode cache, a
+sha256-checked restore - and each commit message lists its mutants: `13da8cc`
+(ten, for R21-9 and R21-10), `9ee22ad` (thirteen, for R21-11 and R21-12),
+`3f8089f` (seven, for R21-16). R21-13 is prose and has none.
 
 ## Drills
 
@@ -271,9 +283,10 @@ which is what the new parenthesis under 2g tells the reader to expect.
 
 | Number | Before (`5c8c0c5`) | After |
 |---|---|---|
-| tests | 816 | **953** |
+| tests | 816 | **972**, rebased onto the v0.5.2 tag (953 before the rebase) |
 | guard modules | 18 | 18 |
 | guard programs bundled in the plugin | 10 | 10 |
+| skill bodies carried in the plugin | 0 | **2** |
 | doctrine rules | 49 | 49 |
 | register items | 26 | **47** |
 | register items decided this round | - | 19 (16 adopted, 3 rejected), 2 deferred |
@@ -298,11 +311,16 @@ not run in this round; CI was not run, because nothing was pushed.
   the CI layer and not the docs layer would go red for it, and it prints what
   it did not do.
 - **A design note for R21-6.** No enforceable budget; see above.
-- **An observation, not a finding.** The plugin's skill wrappers point at
-  `${CLAUDE_PLUGIN_ROOT}/../agent/skills/`, which an installed plugin would not
-  have if R16-1's reading of the install layout holds. This was read, not
-  reproduced in an installed plugin, so it is not filed (6.4); the next round
-  should install the plugin and look.
+- **The skill wrappers' `../` path**, first read here as an observation and
+  not filed until it was checked (6.4), was confirmed against the skills docs,
+  which substitute `${CLAUDE_PLUGIN_ROOT}` into skill text, and against the
+  marketplace docs, which copy a plugin without its surroundings. It is fixed
+  as R21-17, after the v0.5.2 tag rather than in it: usability, not security,
+  and unchanged since v0.5.0.
+- **A NUL byte in an MCP path argument** surfaces as -32603, "this server
+  raised ValueError", which is honest that nothing ran and wrong about whose
+  failure it is (6.8). Found by the outside review; not fixed in the release,
+  and not yet here.
 
 ## Guards touched
 
@@ -315,3 +333,10 @@ the exit-code message only), `plugin/guards/` (re-synced),
 4.5, 6.1, 7.2 - text only), `docs/backflow.md`,
 `agent/skills/robustness-loop.md`, both design notes' partition tables,
 `README.md`, `python/README.md`, `docs/adoption.md` and `CHANGELOG.md`.
+
+On main for v0.5.2, before this branch was rebased: `mcp_server.py` (R21-9,
+R21-11, R21-12, R21-16), `obsgate.py` (R21-11), `CITATION.cff` and
+`js/probe/mcp.mjs` (R21-10), `verify_before_done.py`'s docstring and comment
+(R21-13), `SECURITY.md` and `plugin/README.md`. After the tag, here:
+`plugin/sync_guards.py`, both skill wrappers and the copies beside them
+(R21-17).
