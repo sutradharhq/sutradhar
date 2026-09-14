@@ -7,13 +7,14 @@ description: Run one adversarial robustness round over a codebase - find defects
 The procedure is kept in one canonical file so that every harness reads the
 same text. Read it now, in full, and follow it:
 
-    ${CLAUDE_PLUGIN_ROOT}/../agent/skills/robustness-loop.md
+    ${CLAUDE_PLUGIN_ROOT}/skills/robustness-loop/robustness-loop.md
 
-If that file is not there, this plugin was loaded from outside a Sutradhar
-checkout. Say so rather than improvising the procedure from memory - the
+That file is a byte-identical copy of `agent/skills/robustness-loop.md` in
+<https://github.com/sutradharhq/sutradhar>, kept in step by
+`plugin/sync_guards.py`. If it is not there, this copy of the plugin is
+incomplete. Say so rather than improvising the procedure from memory - the
 value of the loop is in its specifics, and a half-remembered version of it
-is a code review with a longer name. The file lives at
-`agent/skills/robustness-loop.md` in <https://github.com/sutradharhq/sutradhar>.
+is a code review with a longer name.
 
 The guards the loop calls for are available as MCP tools from the
 `sutradhar-guards` server this plugin registers, and as CLIs under

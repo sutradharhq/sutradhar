@@ -406,17 +406,21 @@ code, or the copy-in contract.
 |---|---|---|
 | the two hooks | **copied** (they are new files, and they live here) | `plugin/scripts/*.py`, stdlib only, no imports from the package — a hook that fails to import is a hook that failed, and `sys.path` inside a session is not ours to assume |
 | the nine guard programs the plugin runs, `mcp_server.py` among them | **copied** — `plugin/guards/`, refreshed by `plugin/sync_guards.py` from one explicit list | R16-1. Round 15 referenced them through `${CLAUDE_PLUGIN_ROOT}/../python/sutradhar_guards` to keep one server and one version, and that was a plugin which worked only in the layout it was built in: an installed plugin is copied into `~/.claude/plugins/cache` **without** the files around it. The round-15 argument is answered rather than dropped - `test_plugin_bundle.py` fails on a one-byte divergence, derives the set of scripts the plugin invokes from the hooks' AST and the MCP tool table, and refuses a file in the bundle that no list pins |
-| `agent/skills/*.md` | **referenced** — `plugin/skills/<name>/SKILL.md` carries the frontmatter Claude Code requires and a body that reads the canonical file | the canonical files have no frontmatter (they are handed to any agent, verbatim, by any harness) and adding it would be a Claude-Code-shaped change to a harness-neutral asset. A ratchet asserts one wrapper per canonical skill, so a skill added later cannot be silently un-shipped |
+| `agent/skills/*.md` | **copied** beside each wrapper — `plugin/skills/<name>/<name>.md`, refreshed by `plugin/sync_guards.py`; `SKILL.md` carries the frontmatter Claude Code requires and tells Claude to read the copy | the canonical files have no frontmatter (they are handed to any agent, verbatim, by any harness), and adding it would be a Claude-Code-shaped change to a harness-neutral asset, so the wrapper carries the frontmatter and the body is copied untouched. R21-17 revokes round 16's **referenced**: the wrappers reached `../agent/skills/`, which an installed plugin does not have. A ratchet asserts one wrapper and one byte-identical copy per canonical skill, so a skill added later cannot be silently un-shipped |
 | `agent/packs/*` | **neither** — documented, not installed | the packs are paste-in text for `CLAUDE.md` and a Cursor rules file. A plugin cannot append to `CLAUDE.md`, and a plugin that *silently* injected 15 KB of rules into every session would be doing the thing this note is most careful not to do |
 
-**No plugin config may contain `${CLAUDE_PLUGIN_ROOT}/..`**, and a ratchet
-over every JSON file under `plugin/` enforces it. That path resolves
+**Nothing a plugin component reads may sit behind `${CLAUDE_PLUGIN_ROOT}/..`**,
+and a ratchet over every JSON config and every skill wrapper under `plugin/`
+enforces it. A second test copies `plugin/` alone, as an install does, and
+requires every path a wrapper names to exist in the copy. That path resolves
 perfectly from a checkout and is simply absent after an install, with no
 error at install time to say so — which is why R16-1 survived a full round
-of testing. The skill wrappers still reach for `agent/skills/*.md` through
-`../`, and that is a deliberately different case: a missing skill BODY
-degrades to a wrapper that says the canonical file is not here, while a
-missing guard program is a hook that cannot measure anything.
+of testing. Round 16 kept the skill wrappers reaching through `../` as a
+deliberately different case: a missing skill body degrades to a wrapper
+that says the file is not here, while a missing guard program is a hook
+that cannot measure anything. The degradation was honest, and it was also
+every installed user's whole experience of both skills for three releases.
+R21-17 revokes that exception and extends R16-1 to the skills.
 
 `guard_dir()` resolves in one order, and says both paths when it fails:
 

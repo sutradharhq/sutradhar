@@ -144,16 +144,32 @@ def test_sync_guards_check_agrees_with_this_file():
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+def test_sync_guards_sees_a_drifted_skill_body(tmp_path, monkeypatch):
+    """R21-17: the skill bodies are copies too, and a copy nothing compares
+    is round 15's second answer. Drift one copy in a stand-in bundle and the
+    tool the maintainer runs must name it."""
+    copy = tmp_path / "skills"
+    shutil.copytree(PLUGIN / "skills", copy)
+    victim = copy / "ops-drill" / "ops-drill.md"
+    victim.write_text(victim.read_text(encoding="utf-8") + "\ndrift\n", encoding="utf-8")
+    monkeypatch.setattr(SYNC, "SKILL_BUNDLE", copy)
+    drift = SYNC.differences()
+    assert any(d.startswith("skills/ops-drill/ops-drill.md: differs") for d in drift), drift
+
+
 # ── the plugin points inside itself ─────────────────────────────────────────
 
 def test_no_plugin_config_reaches_outside_the_plugin_directory():
-    """A class ratchet over every JSON config the plugin ships.
+    """A class ratchet over every JSON config and every skill wrapper the
+    plugin ships.
 
     `${CLAUDE_PLUGIN_ROOT}/../anything` is the R16-1 defect itself: it
     resolves from a checkout and is simply absent after an install, with no
-    error at the moment of installation to say so.
+    error at the moment of installation to say so. The skill wrappers were
+    outside this ratchet and reached `../agent/skills/` through three
+    releases (R21-17).
     """
-    configs = sorted(PLUGIN.rglob("*.json"))
+    configs = sorted([*PLUGIN.rglob("*.json"), *PLUGIN.rglob("SKILL.md")])
     assert configs, "no plugin config found - the ratchet would pass vacuously"
     for path in configs:
         text = path.read_text(encoding="utf-8")
@@ -161,6 +177,29 @@ def test_no_plugin_config_reaches_outside_the_plugin_directory():
             f"{path} reaches outside the plugin directory. Installed plugins "
             f"are copied without their surroundings, so that path is present "
             f"only in a checkout.")
+
+
+def test_every_path_a_skill_names_exists_in_an_installed_copy(tmp_path):
+    """R21-17: R16-1's lesson, applied to the skills and tested in the
+    installed condition rather than by string. Claude Code copies an
+    installed plugin into its cache without the directories around it, and
+    substitutes `${CLAUDE_PLUGIN_ROOT}` into a skill's text. So copy
+    `plugin/` alone, as an install does, and every path a wrapper tells
+    Claude to read must be a file inside that copy."""
+    installed = tmp_path / "cache" / "sutradhar"
+    shutil.copytree(PLUGIN, installed)
+    wrappers = sorted(installed.rglob("SKILL.md"))
+    assert wrappers, "no skill wrappers found - the ratchet would pass vacuously"
+    for wrapper in wrappers:
+        named = re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/(\S+)",
+                           wrapper.read_text(encoding="utf-8"))
+        assert named, f"{wrapper.relative_to(installed)} names no file to read"
+        for rel in named:
+            target = (installed / rel).resolve()
+            assert installed.resolve() in target.parents and target.is_file(), (
+                f"{wrapper.relative_to(installed)} tells Claude to read "
+                f"${{CLAUDE_PLUGIN_ROOT}}/{rel}, which an installed copy does "
+                f"not have")
 
 
 def test_mcp_json_points_at_the_bundled_server():

@@ -8,6 +8,19 @@ upgrade by diffing against the tag they took, and `bash bootstrap.sh --check
 
 ## Unreleased
 
+**The plugin's two skills work in an installed plugin** (round 21, R21-17).
+
+- `robustness-loop` and `ops-drill` told Claude to read
+  `${CLAUDE_PLUGIN_ROOT}/../agent/skills/<name>.md`. An installed plugin is
+  copied without `agent/`, so every marketplace user who invoked either
+  skill was told the file was missing. Round 16 had recorded that as a
+  deliberate exception to R16-1; this revokes it. `plugin/sync_guards.py`
+  now copies each canonical skill body beside its wrapper, byte-identical,
+  and the wrappers read that copy. The canonical files are untouched.
+- The ratchet that refuses `${CLAUDE_PLUGIN_ROOT}/..` now covers `SKILL.md`
+  as well as JSON, and a new test copies `plugin/` alone, as an install
+  does, and requires every path a wrapper names to exist in the copy.
+
 **Three lints no longer say OK when they read nothing** (round 21, R21-2).
 
 - `swallow_lint`, `interpolation_lint` and `conflated_degrade_lint`

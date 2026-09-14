@@ -211,7 +211,7 @@ sutradhar/
 │   ├── hooks/hooks.json           PreToolUse gates `git commit`; Stop checks the guard on HEAD
 │   ├── scripts/                   The two hooks, stdlib only - and they never block when THEY fail
 │   ├── guards/                    The guard programs it runs, pinned byte-for-byte to python/ by a test
-│   └── skills/                    Wrappers pointing at the canonical skills above
+│   └── skills/                    The canonical skills above, each copied beside a Claude Code wrapper
 └── bootstrap.sh             Copies the pieces into your repo
 ```
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
-"""Copy the guards this plugin runs into `plugin/guards/`.
+"""Copy the guards this plugin runs into `plugin/guards/`, and the skill
+bodies it offers beside their wrappers in `plugin/skills/`.
 
 A maintainer tool, run from a checkout. The plugin itself never calls it.
 
@@ -56,22 +57,41 @@ BUNDLED = (
     "verify_guard.py",
 )
 
+#: The canonical skill bodies the wrappers in `plugin/skills/` tell Claude to
+#: read, each copied beside its wrapper for the reason the guards are copied:
+#: an installed plugin is copied without `agent/`. R21-17 revokes round 16's
+#: choice to reach them through `${CLAUDE_PLUGIN_ROOT}/../agent/skills/`,
+#: which told every marketplace user that both skills were missing.
+SKILLS = (
+    "ops-drill.md",
+    "robustness-loop.md",
+)
+
 PLUGIN_ROOT = Path(__file__).resolve().parent
 SOURCE = PLUGIN_ROOT.parent / "python" / "sutradhar_guards"
 BUNDLE = PLUGIN_ROOT / "guards"
+SKILL_SOURCE = PLUGIN_ROOT.parent / "agent" / "skills"
+SKILL_BUNDLE = PLUGIN_ROOT / "skills"
+
+
+def _pairs() -> list[tuple[str, Path, Path]]:
+    """(label, source, bundled copy) for every file this tool keeps in step."""
+    guards = [(name, SOURCE / name, BUNDLE / name) for name in BUNDLED]
+    skills = [(f"skills/{Path(name).stem}/{name}", SKILL_SOURCE / name,
+               SKILL_BUNDLE / Path(name).stem / name) for name in SKILLS]
+    return guards + skills
 
 
 def differences() -> list[str]:
     """Bundled files that are absent or not byte-identical to their source."""
     out: list[str] = []
-    for name in BUNDLED:
-        src, dst = SOURCE / name, BUNDLE / name
+    for label, src, dst in _pairs():
         if not src.is_file():
-            out.append(f"{name}: missing from {SOURCE}")
+            out.append(f"{label}: missing from {src.parent}")
         elif not dst.is_file():
-            out.append(f"{name}: missing from {BUNDLE}")
+            out.append(f"{label}: missing from {dst.parent}")
         elif src.read_bytes() != dst.read_bytes():
-            out.append(f"{name}: differs from {src}")
+            out.append(f"{label}: differs from {src}")
     for path in sorted(BUNDLE.glob("*.py")) if BUNDLE.is_dir() else []:
         if path.name not in BUNDLED:
             out.append(f"{path.name}: in the bundle but not in BUNDLED")
@@ -79,16 +99,15 @@ def differences() -> list[str]:
 
 
 def sync() -> list[str]:
-    """Copy every bundled file. Returns the names actually written."""
-    BUNDLE.mkdir(parents=True, exist_ok=True)
+    """Copy every bundled file. Returns the labels actually written."""
     written: list[str] = []
-    for name in BUNDLED:
-        src, dst = SOURCE / name, BUNDLE / name
+    for label, src, dst in _pairs():
         if not src.is_file():
             raise SystemExit(f"[sync-guards] no source file {src}")
         if not dst.is_file() or dst.read_bytes() != src.read_bytes():
+            dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
-            written.append(name)
+            written.append(label)
     return written
 
 
@@ -108,15 +127,15 @@ def main(argv: list[str] | None = None) -> int:
     if "--check" in argv:
         drift = differences()
         if drift:
-            print(f"[sync-guards] {len(drift)} bundled guard(s) out of date "
-                  f"with {SOURCE}:", file=sys.stderr)
+            print(f"[sync-guards] {len(drift)} bundled file(s) out of date "
+                  f"with their sources:", file=sys.stderr)
             for line in drift:
                 print(f"  {line}", file=sys.stderr)
             print("Run `python3 plugin/sync_guards.py` to refresh them.",
                   file=sys.stderr)
             return 1
-        print(f"[sync-guards] OK - {len(BUNDLED)} bundled guard(s) are "
-              f"byte-identical to {SOURCE}.")
+        print(f"[sync-guards] OK - {len(BUNDLED)} bundled guard(s) and "
+              f"{len(SKILLS)} skill bodies are byte-identical to their sources.")
         return 0
 
     written = sync()
@@ -124,8 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[sync-guards] updated {len(written)} file(s): "
               f"{', '.join(written)}")
     else:
-        print(f"[sync-guards] nothing to do - {len(BUNDLED)} file(s) already "
-              f"match {SOURCE}.")
+        print(f"[sync-guards] nothing to do - {len(BUNDLED) + len(SKILLS)} "
+              f"file(s) already match their sources.")
     return 0
 
 

@@ -11,7 +11,7 @@ remembers the guards exist.
 | `hooks/hooks.json` -> `scripts/verify_before_done.py` | On `Stop`: if HEAD carries a `Guard-cmd:` trailer, asks `verify_guard` whether that guard is real. DECORATION blocks the turn from ending; INCONCLUSIVE is reported as inconclusive and never as a pass |
 | `.mcp.json` | Registers `guards/mcp_server.py` so the nine guards are callable as tools mid-task |
 | `guards/` | The guard programs the hooks and the MCP server run |
-| `skills/` | Wrappers for the two canonical skills in `agent/skills/`. They read that file from a Sutradhar checkout; an installed copy does not carry it yet, and the skill says so rather than improvise |
+| `skills/` | The two canonical skills from `agent/skills/`: each wrapper carries the frontmatter Claude Code needs and a byte-identical copy of the procedure it reads, so an installed plugin has them too |
 
 ## Install
 
@@ -105,8 +105,10 @@ The full statement, including what we found in our own audit and when, is in
   hook as the failing party - and the tool call proceeds. A guard harness
   that can wedge a session is not a harness.
 - **It never reports a guard that did not run as green.** No
-  `swallow_baseline.json`, no `docs/rounds/`, no staged Python: each is
-  named as skipped. A commit where nothing was applicable says so out loud.
+  `swallow_baseline.json`, no `docs/rounds/`, no staged Python, or a guard
+  that ran and said it could not check - a lint whose scan read no file:
+  each is named as skipped, in the guard's own words. A commit where
+  nothing was applicable says so out loud.
 - **It says which tree it read.** The guards read the working tree; `git
   commit` commits the index. When they differ, the message names the paths
   where they disagree. The gate never stashes, checks out, or writes

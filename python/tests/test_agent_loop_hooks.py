@@ -821,7 +821,13 @@ def test_every_canonical_skill_has_a_plugin_wrapper():
         assert wrapper.is_file(), f"{path.name} has no plugin wrapper"
         text = wrapper.read_text()
         assert text.startswith("---\n") and "description:" in text.split("---")[1]
-        assert f"${{CLAUDE_PLUGIN_ROOT}}/../agent/skills/{path.name}" in text
+        assert f"${{CLAUDE_PLUGIN_ROOT}}/skills/{path.stem}/{path.name}" in text, (
+            f"{wrapper} does not point at the copy beside it. An installed "
+            f"plugin has no agent/ directory to reach (R21-17).")
+        bundled = wrapper.parent / path.name
+        assert bundled.is_file() and bundled.read_bytes() == path.read_bytes(), (
+            f"{bundled} is missing or differs from {path}. Run "
+            f"`python3 plugin/sync_guards.py`.")
 
 
 def test_no_hook_script_can_shell_out_or_exit_2():

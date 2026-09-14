@@ -7,13 +7,13 @@ description: Run an operations drill - cold-start install, backup/restore reconc
 The procedure is kept in one canonical file so that every harness reads the
 same text. Read it now, in full, and follow it:
 
-    ${CLAUDE_PLUGIN_ROOT}/../agent/skills/ops-drill.md
+    ${CLAUDE_PLUGIN_ROOT}/skills/ops-drill/ops-drill.md
 
-If that file is not there, this plugin was loaded from outside a Sutradhar
-checkout. Say so rather than improvising - a drill without its command-
+That file is a byte-identical copy of `agent/skills/ops-drill.md` in
+<https://github.com/sutradharhq/sutradhar>, kept in step by
+`plugin/sync_guards.py`. If it is not there, this copy of the plugin is
+incomplete. Say so rather than improvising - a drill without its command-
 verifiable gates is a demo, and a demo is what the drill exists to replace.
-The file lives at `agent/skills/ops-drill.md` in
-<https://github.com/sutradharhq/sutradhar>.
 
 A drill's findings belong in a round record (`docs/rounds/`), validated by
 `rounds.py`, like any other finding.
