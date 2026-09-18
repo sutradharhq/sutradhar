@@ -64,5 +64,37 @@ def test_frontend_drill_url_is_not_treated_as_an_api_path(tmp_path):
     assert find_dead_routes(_write(tmp_path, body), {"/api/v2/items"}) == []
 
 
+def test_playwright_unfailable_assertions_are_caught(tmp_path):
+    body = ("await expect(page).toHaveStatus(200);\n"
+            "expect(status).not.toBe(500);\n"
+            "await expect(response).not.toHaveStatus(404);\n"
+            "expect(items).not.toEqual(500);\n")
+    found = find_unfailable_assertions(_write(tmp_path, body))
+    assert [v.key for v in found] == [
+        "a.cy.ts::.not.toBe(500)",
+        "a.cy.ts::.not.toHaveStatus(404)",
+        "a.cy.ts::.not.toEqual(500)",
+    ], found
+
+
+def test_playwright_strong_assertion_is_clean(tmp_path):
+    body = "await expect(page.getByTestId('x')).toBeVisible();\n"
+    assert find_unfailable_assertions(_write(tmp_path, body)) == []
+
+
+def test_floor_trips_when_the_extractor_sees_too_little(tmp_path):
+    body = 'fetch("/real");\n'
+    floored = find_dead_routes(_write(tmp_path, body), {"/real"}, min_literals=2)
+    assert any(v.key.endswith("::extractor-floor") for v in floored), floored
+    assert find_dead_routes(_write(tmp_path, body), {"/real"}, min_literals=1) == []
+
+
+def test_floor_reports_alongside_a_real_dead_route(tmp_path):
+    body = 'fetch("/ghost");\n'
+    found = find_dead_routes(_write(tmp_path, body), {"/real"}, min_literals=2)
+    assert "a.cy.ts::/ghost" in [v.key for v in found], found
+    assert any(v.key.endswith("::extractor-floor") for v in found), found
+
+
 def test_selfcheck_passes():
     assert selfcheck()
