@@ -18,7 +18,13 @@ on:
 jobs:
   python:
     name: Python guards (tests + selfchecks)
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the last step installs the oldest supported
+    # Python (3.9), and setup-python publishes no 3.9 build for ubuntu-26.04.
+    # When ubuntu-latest moved to 26.04 the floor check could not run and the
+    # whole job went red on main (51af715). 24.04 still ships 3.9.25. Moving
+    # this off 24.04 means first finding a 3.9 for the new image, or deciding
+    # to raise the floor - never quietly dropping the step.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
