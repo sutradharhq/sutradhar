@@ -18,7 +18,13 @@ on:
 jobs:
   python:
     name: Python guards (tests + selfchecks)
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the last step installs the oldest supported
+    # Python (3.9), and setup-python publishes no 3.9 build for ubuntu-26.04.
+    # When ubuntu-latest moved to 26.04 the floor check could not run and the
+    # whole job went red on main (51af715). 24.04 still ships 3.9.25. Moving
+    # this off 24.04 means first finding a 3.9 for the new image, or deciding
+    # to raise the floor - never quietly dropping the step.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +117,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
+      - name: The interpreter really is 3.9 and refuses newer syntax (6.7)
+        # The known-bad half of the pair: a runner that quietly handed over a
+        # newer Python would let the floor check pass for ever.
+        run: |
+          python3.9 -c "import sys; assert sys.version_info[:2] == (3, 9), sys.version"
+          printf 'match 1:\n    case 1:\n        pass\n' > /tmp/newer_syntax.py
+          if python3.9 -m py_compile /tmp/newer_syntax.py 2>/dev/null; then
+            echo "3.10 syntax compiled under the 3.9 floor: the check cannot see a regression"; exit 1
+          fi
       - run: |
           python3.9 -m compileall -q python/sutradhar_guards
           python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
