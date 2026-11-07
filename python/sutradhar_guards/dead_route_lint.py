@@ -90,10 +90,15 @@ _URL_RE = re.compile(
 _FETCH_RE = re.compile(r"""(?:fetch|request|get|post)\(\s*[`'"](?:\$\{[^}]*\})?(/[^`'"]*)""")
 
 # "not this one specific failure" — passes on every OTHER wrong answer.
+# Cypress first (the incident), then the same shape in Playwright and Jest:
+# a suite that migrated runners without migrating its assertions kept the
+# green-forever property under a new spelling.
 _UNFAILABLE_RE = re.compile(
     r"""\.to\.not\.eq\(\s*(?:500|404|403|401)\s*\)"""
     r"""|!==\s*(?:500|404)"""
     r"""|\.not\.to\.equal\(\s*(?:500|404)\s*\)"""
+    r"""|\.not\.to(?:Be|Equal)\(\s*(?:500|404|403|401)\s*\)"""
+    r"""|\.not\.toHaveStatus\(\s*(?:500|404|403|401)\s*\)"""
 )
 
 
@@ -142,17 +147,29 @@ def find_dead_routes(
     spec_root: str | Path,
     routes: set[str],
     patterns: tuple[str, ...] = ("*.cy.ts", "*.cy.js", "*.spec.ts", "*.e2e.ts"),
+    min_literals: int = 0,
 ) -> list[Violation]:
     """`spec::path` for every URL under test that the API does not serve.
 
     One entry per distinct dead path per spec - the same absent route named
     twice in a file is one thing to fix.
+
+    `min_literals` is the floor: when the extractor sees fewer URL literals
+    than a suite of this size must name, the check reports
+    `<root>::extractor-floor` instead of passing vacuously. An extractor that
+    matches nothing in your stack's spelling (a client wrapper, template
+    literals the regexes do not cover) finds zero routes and zero dead ones,
+    and a ratchet over that empty list is green forever. Set the floor to the
+    number of routes your app actually reads; a real dead route alongside a
+    tripped floor is still reported too.
     """
     dead: dict = {}
+    seen = 0
     for spec in _spec_files(spec_root, patterns):
         text = spec.read_text(errors="replace")
         for regex in (_URL_RE, _FETCH_RE):
             for raw in regex.findall(text):
+                seen += 1
                 norm = _normalise(raw)
                 if norm and not route_matches(norm, routes):
                     key = f"{spec.name}::{norm}"
@@ -160,7 +177,15 @@ def find_dead_routes(
                         key,
                         f"{spec.name}: {norm} is not in the API's route table",
                     ))
-    return [dead[k] for k in sorted(dead)]
+    out = [dead[k] for k in sorted(dead)]
+    if seen < min_literals:
+        root = Path(spec_root).name
+        out.append(Violation(
+            f"{root}::extractor-floor",
+            f"extractor saw {seen} URL literal(s) under {root}, below the "
+            f"floor of {min_literals}: the check is not looking at anything",
+        ))
+    return out
 
 
 def find_unfailable_assertions(
@@ -196,6 +221,10 @@ def selfcheck() -> bool:
         and not route_matches("/ghost", routes)
         and bool(_UNFAILABLE_RE.search("expect(res.status).to.not.eq(500);"))
         and not _UNFAILABLE_RE.search("expect(res.status).to.eq(200);")
+        and bool(_UNFAILABLE_RE.search("expect(status).not.toBe(500);"))
+        and bool(_UNFAILABLE_RE.search(
+            "await expect(response).not.toHaveStatus(404);"))
+        and not _UNFAILABLE_RE.search("await expect(page).toBeVisible();")
         and _normalise("/instances?x=1") == "/instances"
         and _normalise("relative/path") is None
     )
@@ -229,11 +258,27 @@ def selfcheck() -> bool:
                   "an assertion changed its banked key")
             return False
 
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "b.spec.ts").write_text('fetch("/real");\n')
+        floored = find_dead_routes(root, {"/real"}, min_literals=2)
+        unflowed = find_dead_routes(root, {"/real"}, min_literals=1)
+        if not any(v.key.endswith("::extractor-floor") for v in floored):
+            print("[dead-route-lint] SELFCHECK FAILED - the floor did not "
+                  "trip on one literal against a floor of two")
+            return False
+        if any(v.key.endswith("::extractor-floor") for v in unflowed):
+            print("[dead-route-lint] SELFCHECK FAILED - the floor tripped "
+                  "when the extractor saw enough")
+            return False
+
     # A silent pass cannot be told apart from a check that never ran (6.7):
     # name the pairs that were exercised, so exit 0 means something.
     print("[dead-route-lint] selfcheck ok: live route matched, ghost route refused, "
-          "`not.eq(500)` caught, `eq(200)` passed, query string normalised, keys "
-          "unchanged by four lines inserted above them")
+          "`not.eq(500)` caught, `eq(200)` passed, Playwright `not.toBe(500)` and "
+          "`not.toHaveStatus(404)` caught, query string normalised, keys "
+          "unchanged by four lines inserted above them, floor trips at 1-of-2 "
+          "and holds at 1-of-1")
     return True
 
 
