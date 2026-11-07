@@ -18,7 +18,13 @@ on:
 jobs:
   python:
     name: Python guards (tests + selfchecks)
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the last step installs the oldest supported
+    # Python (3.9), and setup-python publishes no 3.9 build for ubuntu-26.04.
+    # When ubuntu-latest moved to 26.04 the floor check could not run and the
+    # whole job went red on main (51af715). 24.04 still ships 3.9.25. Moving
+    # this off 24.04 means first finding a 3.9 for the new image, or deciding
+    # to raise the floor - never quietly dropping the step.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +89,25 @@ jobs:
         # A mistyped rule id silently loses the attribution 8.1
         # depends on, and nothing else would ever notice.
         run: python python/sutradhar_guards/rounds.py docs/rounds/ --check
+      - name: Defect corpus scores what the guards claim (denominator held)
+        # R22-1: the demo's "7 of 7" was a loop counter, so deleting a block
+        # yielded "6 of 6" and exit 0. The corpus takes its denominator from
+        # the manifest set on disk; this step runs the full scorer with the
+        # archive flags so scars and rule ids resolve, not just parse.
+        # R24-2: a denominator read off the disk shrinks with the disk - a
+        # deleted case printed "51 of 51" and passed. corpus/case_count.json
+        # declares the total and this step fails unless exactly that many
+        # cases load; --require-case-count makes deleting the declaration
+        # itself an exit 2.
+        run: python python/sutradhar_guards/corpus.py corpus/ --rounds docs/rounds/ --backflow docs/backflow.md --require-case-count
+      - name: Every guard is silent on every clean twin in the corpus
+        # R25-4: the step above scores each case against its own guard only,
+        # so a guard that flags ANOTHER case's clean twin was invisible here.
+        # detectors flagged the byte-order-mark case's clean twin from v0.6.0
+        # until round 25 ran `--sweep detectors` by hand (R25-2). One flag
+        # reads the registry, so a guard added later is swept with no edit
+        # here. About 35 s for 15 guards over 57 cases on an M2 laptop.
+        run: python python/sutradhar_guards/corpus.py corpus/ --sweep-all --rounds docs/rounds/ --backflow docs/backflow.md
       - name: verify-guard selfcheck (a decorative guard must be caught)
         # Builds real repos with a real guard and a deliberately decorative
         # one and requires the tool to tell them apart. A verifier that
@@ -92,6 +117,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
+      - name: The interpreter really is 3.9 and refuses newer syntax (6.7)
+        # The known-bad half of the pair: a runner that quietly handed over a
+        # newer Python would let the floor check pass for ever.
+        run: |
+          python3.9 -c "import sys; assert sys.version_info[:2] == (3, 9), sys.version"
+          printf 'match 1:\n    case 1:\n        pass\n' > /tmp/newer_syntax.py
+          if python3.9 -m py_compile /tmp/newer_syntax.py 2>/dev/null; then
+            echo "3.10 syntax compiled under the 3.9 floor: the check cannot see a regression"; exit 1
+          fi
       - run: |
           python3.9 -m compileall -q python/sutradhar_guards
           python3.9 python/sutradhar_guards/swallow_lint.py --selfcheck
@@ -121,6 +155,86 @@ jobs:
       - run: |
           pip install -q pytest
           bash examples/run-the-guards.sh
+
+  action:
+    name: The GitHub Action fails a planted tree and passes a clean one
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # action.yml exercised from this checkout (`uses: ./`), in pairs (6.7):
+    # each red is only evidence beside a green that differs from it in one
+    # input. A step expected to go red carries continue-on-error, so the
+    # step after it asserts its outcome - without that, an expected red that
+    # went green would read as a passing job. No setup-python: the action
+    # must work on the runner's own python3, as it will for an adopter.
+    steps:
+      - uses: actions/checkout@v4
+      # (a) The planted tree: a silent swallow and an f-string query in
+      # examples/broken-app. Default guards, only `paths` named.
+      - name: Action over the planted tree (must go red)
+        id: planted
+        continue-on-error: true
+        uses: ./
+        with:
+          paths: examples/broken-app/app
+      - name: The planted tree's run failed
+        env:
+          OUTCOME: ${{ steps.planted.outcome }}
+        run: test "$OUTCOME" = failure
+      # (b) Same inputs, the clean twin. If this went red, (a)'s red would
+      # prove only that the action fails.
+      - name: Action over the clean fixture (must pass)
+        uses: ./
+        with:
+          paths: python/tests/fixtures/action-clean
+      # (b2) R24-4: the framework passes its own action. Run with only the
+      # defaults it went red on this repository - selfcheck handlers read as
+      # swallows, two conflations - and an adopter's first look at the repo
+      # would have been a red badge from its own guard. Each finding was
+      # fixed or banked with a reason (docs/rounds/round-024.md); the banked
+      # ones live in .github/sutradhar/, never in a weakened lint rule.
+      # examples/ is deliberately broken code and is not scanned; corpus/
+      # case bodies are markdown. python/tests/test_distribution.py reads
+      # this step's inputs and runs them offline.
+      - name: Action over this framework's own source (must pass)
+        uses: ./
+        with:
+          paths: action plugin python
+          swallow-baseline: .github/sutradhar/swallow_baseline.json
+          conflated-degrade-baseline: .github/sutradhar/conflated_degrade_baseline.json
+      # (c) A tree with no Python file, default on-cannot-run (`fail`): an
+      # exit 2 must fail the job, never read as a pass (2.9).
+      - name: Action over a tree with no Python (must go red by default)
+        id: nopython
+        continue-on-error: true
+        uses: ./
+        with:
+          paths: docs/design
+      - name: The no-Python run failed
+        env:
+          OUTCOME: ${{ steps.nopython.outcome }}
+        run: test "$OUTCOME" = failure
+      # (d) The same tree under `skip`: the three source lints are named
+      # skips and ci-step still passes, so the job passes - the half of the
+      # pair that shows (c) failed for the exit 2 and not for the tree.
+      - name: Action over a tree with no Python, on-cannot-run skip (must pass)
+        uses: ./
+        with:
+          paths: docs/design
+          on-cannot-run: skip
+      # (e) An input carrying a shell command where a path belongs must be
+      # refused, and the command must not have run.
+      - name: Action given a shell command as a path (must be refused)
+        id: injected
+        continue-on-error: true
+        uses: ./
+        with:
+          paths: 'src; touch /tmp/sutradhar-injected'
+      - name: The injection-shaped input was refused and ran nothing
+        env:
+          OUTCOME: ${{ steps.injected.outcome }}
+        run: |
+          test "$OUTCOME" = failure
+          test ! -e /tmp/sutradhar-injected
 
   probe:
     name: Probe selftest (real core vs real bridge)

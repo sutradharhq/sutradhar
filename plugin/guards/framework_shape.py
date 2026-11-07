@@ -215,7 +215,7 @@ _DOLLAR_HIT = re.compile(r"\$\d[\d,.]*\d")
 #: What ships and what teaches, relative to the repository root.
 SURFACE_DIRS = (
     "python/sutradhar_guards", "python/tests",
-    "examples", "js", "plugin", "docs",
+    "examples", "js", "plugin", "docs", "corpus",
 )
 SURFACE_FILES = (
     "README.md", "DOCTRINE.md", "SECURITY.md", "python/README.md",

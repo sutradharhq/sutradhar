@@ -76,6 +76,19 @@ def test_a_lazy_third_party_guard_import_is_allowed(tmp_path):
     assert find_nonstdlib_guard_imports(g) == []
 
 
+def test_a_bom_prefixed_guard_is_judged_like_a_plain_one(tmp_path):
+    # R25-3: read as utf-8 the mark reached the parser and a stdlib-only
+    # guard was reported `could not parse`; the marked third-party import
+    # must still be the finding, not a parse failure standing in for it.
+    g = tmp_path / "sutradhar_guards"
+    g.mkdir()
+    (g / "ok.py").write_bytes(b"\xef\xbb\xbfimport os\n")
+    (g / "bad.py").write_bytes(b"\xef\xbb\xbfimport __absent_dep__\n")
+    found = find_nonstdlib_guard_imports(g)
+    assert [Path(v.path).name for v in found] == ["bad.py"]
+    assert "could not parse" not in found[0].why
+
+
 # ── dependency manifests ─────────────────────────────────────────────────────
 
 def test_a_dependency_manifest_in_the_surface_is_caught(tmp_path):

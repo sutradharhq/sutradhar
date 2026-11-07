@@ -74,7 +74,7 @@ import urllib.parse
 from pathlib import Path
 
 SERVER_NAME = "sutradhar-guards"
-SERVER_VERSION = "0.5.2"
+SERVER_VERSION = "0.6.1"
 
 # Verified against the specification on 2026-09-02; see docs/design/mcp-server.md
 # for the page URLs. Newest first - `server/discover` reports this list, and a
@@ -918,21 +918,32 @@ def public_tools() -> list[dict]:
 
 # ── running a guard ─────────────────────────────────────────────────────────
 
-def _json_verdict(stdout: str) -> object:
-    """The verdict in the JSON object a guard printed with `--json`, or None.
+def _json_verdict(stdout: str) -> "tuple[object, str]":
+    """(verdict, "") from the JSON object a guard printed with `--json`, or
+    (None, why there is none).
 
     The object is printed indented, so it begins on a line that starts with
     `{`; parsing from the LAST such line leaves any progress text above it
-    out of the way."""
+    out of the way. "Printed no JSON" and "printed JSON that would not parse"
+    were both a bare None, so the refusal said the guard printed nothing when
+    it had printed something broken (R24-3, 2.7): the reason now travels with
+    the None and the refusal quotes it.
+    """
     lines = stdout.splitlines()
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].startswith("{"):
             try:
                 payload = json.loads("\n".join(lines[i:]))
-            except ValueError:
-                return None
-            return payload.get("verdict") if isinstance(payload, dict) else None
-    return None
+            except ValueError as exc:
+                return None, (f"the JSON it printed could not be parsed "
+                              f"({type(exc).__name__}: {exc})")
+            if not isinstance(payload, dict):
+                return None, (f"the JSON it printed is a "
+                              f"{type(payload).__name__}, not an object")
+            if "verdict" not in payload:
+                return None, "the JSON it printed has no `verdict` key"
+            return payload["verdict"], ""
+    return None, "it printed no JSON object"
 
 
 def run_tool(name: str, arguments: dict) -> dict:
@@ -1039,12 +1050,13 @@ def run_tool(name: str, arguments: dict) -> dict:
         # `commit` once turned its usage text into a VERIFIED result. This
         # server asked for `--json`, so it requires that JSON, and a verdict
         # in it that agrees with the exit code - or it reports no verdict.
-        said = _json_verdict(proc.stdout or "")
+        said, why_none = _json_verdict(proc.stdout or "")
         if said != verdict:
             raise InstrumentError(
                 f"{name} exited {proc.returncode}, which would mean {verdict}, "
                 f"but it did not print the JSON verdict this server asked for"
-                + (f" - the JSON it printed says {said!r}" if said else "")
+                + (f" - the JSON it printed says {said!r}" if why_none == ""
+                   else f" - {why_none}")
                 + ". An exit code alone is not a verdict, so none is reported.",
                 tool=name, exit_code=proc.returncode, json_verdict=said,
                 stdout=out, stderr=err,
@@ -1213,6 +1225,11 @@ def handle_line(line: str) -> dict | None:
         # handling would surface as a traceback the caller reads as a
         # statement about their repository (doctrine 2.4, the R3-1 scar).
         _log(f"unhandled {type(exc).__name__} in {method}: {exc}")
+        # Banked in the conflated-degrade baseline (R24-5): JSON-RPC forbids
+        # any reply to a notification, so None is the only correct return
+        # for a failed one and a successful one alike. The failure is told
+        # on the log line above, which is where a notification's failure
+        # can be told at all.
         if is_notification:
             return None
         return {"jsonrpc": "2.0", "id": mid, "error": InstrumentError(

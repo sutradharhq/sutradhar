@@ -442,7 +442,7 @@ def _a_domain_literal() -> str:
 #: 204 and stayed green. A guard whose fixtures come from the thing it
 #: guards cannot see a deletion (2.2, and 3.6 on the gate's own config).
 REQUIRED_SURFACE_DIRS = ("python/sutradhar_guards", "python/tests",
-                         "examples", "js", "plugin", "docs")
+                         "examples", "js", "plugin", "docs", "corpus")
 REQUIRED_SURFACE_FILES = ("README.md", "DOCTRINE.md", "SECURITY.md",
                           "python/README.md")
 

@@ -128,7 +128,7 @@ rl.on("line", async (line) => {
         result: {
           protocolVersion: params?.protocolVersion || "2025-06-18",
           capabilities: { tools: {} },
-          serverInfo: { name: "sutradhar-probe", version: "0.5.2" },
+          serverInfo: { name: "sutradhar-probe", version: "0.6.1" },
         },
       });
     } else if (method === "notifications/initialized") {

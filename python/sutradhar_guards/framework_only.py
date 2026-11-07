@@ -134,7 +134,8 @@ def find_nonstdlib_guard_imports(guards_dir: Path) -> list[Violation]:
     out: list[Violation] = []
     for py in sorted(guards_dir.glob("*.py")):
         try:
-            roots = _import_roots(py.read_text(encoding="utf-8"))
+            # utf-8-sig: a BOM-prefixed guard is one Python imports (R25-3).
+            roots = _import_roots(py.read_text(encoding="utf-8-sig"))
         except (SyntaxError, OSError) as exc:
             out.append(Violation(str(py), f"could not parse: {exc}"))
             continue

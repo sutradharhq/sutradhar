@@ -16,6 +16,19 @@ that ship with it.
 That gap is the entire argument of this repo: **a green suite is evidence of
 nothing until something has shown it can go red.**
 
+The seven, in plain words - each is a section below, with the real incident
+it is copied from:
+
+| # | What the green suite hid | Caught by |
+|---|---|---|
+| 1 | An outage recorded as "this device reported nothing" | `swallow_lint.py` |
+| 2 | Instant in the demo, a memory bomb after a year of data | `detectors.py` |
+| 3 | SQL injection waiting on one caller change | `interpolation_lint.py` |
+| 4 | A summary whose numbers the model made up | `claim_check.py` |
+| 5 | The billing test has never run anywhere, and still counts | `envgate.py` |
+| 6 | A promise of 200,000 devices in 800ms that nothing enforces | `budget.py` |
+| 7 | A test that survives deleting the feature it tests | `verify_guard.py` |
+
 ---
 
 ## What is planted, and why each one matters

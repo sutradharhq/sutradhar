@@ -14,13 +14,14 @@ earned it and the usage pattern.
   golden               golden-dataset gate with declared tolerance + reasoned re-baseline
   detectors            ready-made ratchet detectors (imports, unbounded ORDER BY)
   obsgate              observability floor as a provenance gate (doctrine 6.6)
+  corpus               defect-corpus scorer: twin verdicts, coverage floor (CLI)
   dead_route_lint      tests that cannot fail: weak assertions + dead routes
   conflated_degrade_lint  a failed read that reads as an empty one (2.7's quiet half)
   ci_step_lint         every CI step can reach the script it names (6.7)
 """
 # Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
 # Part of Sutradhar: https://github.com/sutradharhq/sutradhar
-__version__ = "0.5.2"
+__version__ = "0.6.1"
 
 # Exports are resolved LAZILY (PEP 562). Importing the submodules eagerly
 # here made `python -m sutradhar_guards.budget` emit, on every single run:

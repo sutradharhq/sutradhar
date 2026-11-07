@@ -367,7 +367,7 @@ more. *Scar: a documented safety control existed in three docstrings and in no c
 **7.3 One worktree per agent. Stage only named files; never `git add -A` on
 a shared tree.** *Scar: an agent's explicit `git add <file>` captured
 another session's unstaged mid-edits to the same file; a `git add -A` swept
-another project's untracked WIP into a robustness commit twice.* The mechanism for it is a file-ownership manifest: each parallel agent declares the paths it owns before it starts, and a stage that touches a path owned by another agent is refused. *Scar: the two collisions above; one thread built the manifest because the sentence had not prevented them (B-16).*
+another project's untracked WIP into a robustness commit twice.* The mechanism for it is a file-ownership manifest: each parallel agent declares the paths it owns before it starts, and a stage that touches a path owned by another agent is refused. *Scar: the two collisions above; one thread built the manifest because the sentence had not prevented them (B-16).* Ownership runs the other way at cleanup: a run removes what its own record says it created, never a list of the names it expects to find. A hardcoded list deletes whatever else answers to those names and misses whatever the run actually made. *Scar: a cleanup step deleted a hardcoded list of names instead of what the run itself had created (B-46).*
 
 **7.4 Record what you ruled out** (and why) where the next session will
 look. Un-recorded dead ends get re-explored at full price. Decisions chain: a record that changes an earlier one says whether it *extends* or *revokes* it, in those words, so a reader follows the chain without re-deriving it. *Practice, not scar (B-11): it strengthens this rule's mechanism and founds nothing.*

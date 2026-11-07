@@ -19,6 +19,9 @@ APP="$HERE/broken-app"
 G="$ROOT/python/sutradhar_guards"
 PY="${PYTHON:-python3}"
 
+# The total is declared, not counted (R22-1): a denominator taken from
+# how many blocks happened to run reads "6 of 6" with a block deleted.
+EXPECTED=7
 pass=0
 missed=0
 step=0
@@ -195,8 +198,17 @@ fi
 echo
 bold "── Result ───────────────────────────────────────────────────────────"
 echo
+if [ "$step" -ne "$EXPECTED" ]; then
+  printf "  \033[31m%d of %d checks ran - %d are declared.\033[0m\n" "$step" "$EXPECTED" "$EXPECTED"
+  echo
+  dim "  A check that did not run has not passed. Either a block was removed"
+  dim "  or EXPECTED is stale; this demo refuses to report a total it did not"
+  dim "  measure. See examples/README.md."
+  echo
+  exit 1
+fi
 if [ $missed -eq 0 ]; then
-  printf "  \033[32m%d of %d planted defects caught.\033[0m\n" "$pass" "$step"
+  printf "  \033[32m%d of %d planted defects caught.\033[0m\n" "$pass" "$EXPECTED"
   echo
   dim "  None of them were found by reading the code, and none of them were"
   dim "  found by the app's own passing test suite. That gap is the whole"

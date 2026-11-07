@@ -9,6 +9,7 @@ Verified by mutation before being written down: fixing the silent swallow,
 making the decorative test real, or enforcing the orphan budget each turns
 the runner red (6 of 7, exit 1).
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -20,10 +21,26 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "examples" / "run-the-guards.sh"
 APP = ROOT / "examples" / "broken-app"
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("bash") is None or not RUNNER.exists(),
-    reason="needs bash and the examples tree",
-)
+def _missing() -> "str | None":
+    """Why the demo cannot run here, or None."""
+    if shutil.which("bash") is None:
+        return "bash is not on PATH"
+    if not RUNNER.exists():
+        return f"{RUNNER} does not exist"
+    return None
+
+
+# A skip is not a pass (2.9, B-66). Off CI a contributor without bash may skip
+# the demo and is told so; on CI (GitHub sets CI=true) a missing dependency is
+# a collection error, because a skipped module there reads as a green suite.
+# Verified by mutation: renaming examples/run-the-guards.sh with CI=true makes
+# this module error and pytest exit 2; without CI it skips with the reason.
+_WHY = _missing()
+if _WHY and os.environ.get("CI", "").lower() not in ("", "0", "false"):
+    pytest.fail(f"the demo cannot run: {_WHY}. On CI that is a failure, not "
+                f"a skip (2.9, B-66).", pytrace=False)
+pytestmark = pytest.mark.skipif(_WHY is not None,
+                                reason=f"needs bash and the examples tree: {_WHY}")
 
 
 def _run():
@@ -73,3 +90,30 @@ def test_the_runner_fails_when_a_defect_is_fixed(tmp_path):
     )
     assert proc.returncode == 1, "the runner passed with a planted defect removed"
     assert "MISSED" in proc.stdout
+
+
+def test_the_runner_fails_when_a_check_is_deleted(tmp_path):
+    """R22-1: the total used to be counted from the blocks that ran, so
+    deleting one printed "6 of 6" and exited 0 - and a deleted check is the
+    one edit nobody reviews as a weakening. The runner now declares
+    EXPECTED and refuses a run whose count differs.
+
+    Mutation: restoring the old tail (report `$step` as the total, no
+    EXPECTED comparison) turns this red with exit 0 and "6 of 6"."""
+    sandbox = tmp_path / "sutradhar"
+    shutil.copytree(ROOT, sandbox, ignore=shutil.ignore_patterns(
+        ".git", "__pycache__", "*.pyc", "node_modules"))
+    runner = sandbox / "examples" / "run-the-guards.sh"
+    text = runner.read_text()
+    start = text.index("# 3. query interpolation")
+    end = text.index("# 4. fabricated numbers")
+    runner.write_text(text[:start] + text[end:])
+    proc = subprocess.run(
+        ["bash", str(runner)], capture_output=True, text=True,
+        env={"PATH": __import__("os").environ["PATH"], "PYTHON": sys.executable},
+        cwd=str(sandbox), timeout=300,
+    )
+    assert proc.returncode == 1, (
+        f"the runner passed with a check deleted:\n{proc.stdout}")
+    assert "6 of 7 checks ran" in proc.stdout
+    assert "6 of 6" not in proc.stdout

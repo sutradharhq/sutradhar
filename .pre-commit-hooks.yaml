@@ -1,0 +1,67 @@
+# Copyright 2026 Varun Mundra. Licensed under the Apache License, Version 2.0.
+# Part of Sutradhar: https://github.com/sutradharhq/sutradhar
+#
+# Sutradhar's guards as pre-commit hooks:
+#
+#   repos:
+#     - repo: https://github.com/sutradharhq/sutradhar
+#       rev: v0.6.0
+#       hooks:
+#         - id: sutradhar-swallow
+#         - id: sutradhar-interpolation
+#         - id: sutradhar-conflated-degrade
+#         - id: sutradhar-ci-step
+#
+# `language: script`, not `python`. A python hook makes pre-commit pip-install
+# this repository, which needs a setup.py or pyproject.toml, and this
+# repository ships no dependency manifest by design (framework_only.py fails
+# the build on one). A script hook runs the guard file itself, by its
+# `#!/usr/bin/env python3` line, from pre-commit's clone of this repository -
+# so each entry must be committed executable (mode 100755), and
+# python/tests/test_distribution.py fails the build when one is not.
+# pre-commit 4 reads `script` as `unsupported_script`; same behaviour.
+#
+# Exit codes are the guards' own: 0 clean, 1 a finding, 2 could not run.
+# pre-commit fails the commit on any non-zero, so a guard that could not run
+# blocks the commit and prints why - it is never a silent pass.
+
+- id: sutradhar-swallow
+  name: sutradhar swallow-lint (silent exception swallows)
+  description: Flags broad except handlers that neither log, re-raise, nor degrade explicitly. Honours swallow_baseline.json at the repository root.
+  entry: python/sutradhar_guards/swallow_lint.py
+  language: script
+  types: [python]
+  files: \.py$
+
+- id: sutradhar-interpolation
+  name: sutradhar interpolation-lint (values interpolated into a query)
+  description: Flags f-string, %-format and .format() interpolation into SQL/SPARQL strings.
+  entry: python/sutradhar_guards/interpolation_lint.py
+  language: script
+  types: [python]
+  files: \.py$
+
+# Whole tree, not the staged files: this ratchet reports a banked entry it
+# did not see as "now distinguishable, bank the lower floor" and exits 1, so
+# handed only the staged files it would fail every commit that left a
+# baselined file untouched. Override `args` to name your source directory.
+- id: sutradhar-conflated-degrade
+  name: sutradhar conflated-degrade-lint (a failure that reads as "nothing there")
+  description: Flags functions that return the same value on failure as on a legitimate empty result. Honours conflated_degrade_baseline.json at the repository root.
+  entry: python/sutradhar_guards/conflated_degrade_lint.py
+  language: script
+  types: [python]
+  files: \.py$
+  pass_filenames: false
+  args: [.]
+
+# One directory, not the staged files: the guard takes exactly one workflow
+# file, workflow directory, or repository root.
+- id: sutradhar-ci-step
+  name: sutradhar ci-step-lint (CI steps reach their script and keep its exit code)
+  description: Flags workflow steps that name a script they cannot reach, or pipe away its exit code.
+  entry: python/sutradhar_guards/ci_step_lint.py
+  language: script
+  files: ^\.github/workflows/.*\.ya?ml$
+  pass_filenames: false
+  args: [.github/workflows]

@@ -1,4 +1,6 @@
 import sys
+
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -228,3 +230,181 @@ def test_a_sparql_block_built_with_format_is_seen():
     )
     hits = check_source(src, SPARQL)
     assert len(hits) == 1 and hits[0][1] == "tenant"
+
+
+def test_a_file_and_a_symlink_to_it_report_once(tmp_path, monkeypatch, capsys):
+    """R24-23: the same interpolation reached through a link and its target
+    was reported twice. One file, one finding; still exit 1.
+
+    Mutation: `if target in seen: continue` -> `if False: continue` in
+    _read_once - two report lines, red.
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text(
+        "def q(x):\n    return f\"SELECT * FROM t WHERE a = '{x}'\"\n")
+    (src / "link.py").symlink_to("a.py")
+    monkeypatch.chdir(tmp_path)
+    assert main(["src"]) == 1
+    out = capsys.readouterr().out
+    assert "1 query interpolation risk(s)" in out, out
+    assert "src/a.py:2" in out and "link.py" not in out, out
+
+
+def test_a_symlink_out_of_the_scanned_paths_is_skipped_and_said(
+        tmp_path, monkeypatch, capsys):
+    """R24-23's outside-root rule, pinned here as well as in
+    conflated_degrade_lint: a link to an interpolated query outside every
+    scanned directory is skipped and the count printed; the same file
+    inside the scanned root is still reported (the pair).
+
+    Mutation (the line that runs, in _read_once): `if is_link and not
+    any(...)` -> `if False and not any(...)` - the far query is read
+    through the link and fails the clean tree, red.
+    """
+    bad = "def q(x):\n    return f\"SELECT * FROM t WHERE a = '{x}'\"\n"
+    far = tmp_path / "elsewhere"
+    far.mkdir()
+    (far / "far.py").write_text(bad)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    (src / "out.py").symlink_to(far / "far.py")
+    monkeypatch.chdir(tmp_path)
+    assert main(["src"]) == 0
+    assert "skipped 1 symlinked file(s)" in capsys.readouterr().out
+    (src / "out.py").unlink()
+    (src / "inside.py").write_text(bad)
+    assert main(["src"]) == 1
+    assert "src/inside.py:2" in capsys.readouterr().out
+
+
+# ── R24-27..29: every file the walk does not judge is named ─────────────────
+#
+# A byte-order mark, a NUL byte, or syntax newer than the interpreter made
+# the file unparsable and the lint returned no findings for it - clean.
+# Each case below runs through main() from inside the tree, as CI runs it.
+
+_R27_BAD = "def q(x):\n    return f\"SELECT * FROM t WHERE a = '{x}'\"\n"
+
+
+def _r27(tmp_path, monkeypatch, capsys, files: dict) -> tuple:
+    src = tmp_path / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    for name, body in files.items():
+        p = src / name
+        if isinstance(body, bytes):
+            p.write_bytes(body)
+        else:
+            p.write_text(body)
+    monkeypatch.chdir(tmp_path)
+    code = main(["src"])
+    out = capsys.readouterr()
+    return code, out.out, out.err
+
+
+def test_r27_a_bom_prefixed_defect_is_found_as_the_plain_one_is(
+        tmp_path, monkeypatch, capsys):
+    """The pair: the BOM twin's finding is the plain twin's finding.
+
+    Mutation (the line that runs, in read_source): `encoding="utf-8-sig"`
+    -> `encoding="utf-8"` - the BOM file is NOT JUDGED, exit 2, red.
+    """
+    code, out, _ = _r27(tmp_path / "a", monkeypatch, capsys,
+                        {"m.py": b"\xef\xbb\xbf" + _R27_BAD.encode()})
+    assert code == 1, out
+    assert "src/m.py:2" in out, out
+    code, out, _ = _r27(tmp_path / "b", monkeypatch, capsys, {"m.py": _R27_BAD})
+    assert code == 1 and "src/m.py:2" in out, out
+
+
+@pytest.mark.parametrize("body", [b"def (:\n", b"x = 'a\x00b'\n"],
+                         ids=["syntax-error", "nul-byte"])
+def test_r27_an_unparsable_file_is_named_and_exits_two(
+        tmp_path, monkeypatch, capsys, body):
+    """Mutation (the line that runs, in _parse): `raise NotJudged(...)` ->
+    `return ast.parse("")` (an empty tree: the old `return []`) - exit 0,
+    red.
+    """
+    code, out, err = _r27(tmp_path, monkeypatch, capsys,
+                          {"bad.py": body, "ok.py": "x = 1\n"})
+    assert code == 2, out + err
+    assert "NOT JUDGED" in out and "src/bad.py: does not parse" in out, out
+    assert "could not judge 1 file(s) (src/bad.py)" in err, err
+
+
+def test_r27_an_unparsable_file_beside_a_finding_is_exit_one_and_still_named(
+        tmp_path, monkeypatch, capsys):
+    """A finding outranks a file not judged: under the Action's skip a 2 is
+    a pass, so the unparsable neighbour would have hidden the finding.
+
+    Mutation (the line that runs, in _verdict): `return 1 if found else 2
+    if unjudged else 0` -> `return 2 if unjudged else 1 if found else 0` -
+    exit 2, red.
+    """
+    code, out, _ = _r27(tmp_path, monkeypatch, capsys,
+                        {"bad.py": b"def (:\n", "real.py": _R27_BAD})
+    assert code == 1, out
+    assert "src/m.py:2".replace("m.py", "real.py") in out, out
+    assert "src/bad.py: does not parse" in out, out
+
+
+def test_r28_a_directory_named_like_a_module_is_not_read(
+        tmp_path, monkeypatch, capsys):
+    """rglob yielded a directory named `fixtures.py`, read_text raised
+    IsADirectoryError, and the guard crashed. Now it is a directory.
+
+    Mutation: none on a single line - the walk (os.walk) never lists a
+    directory among files; the regression it pins is a return to rglob.
+    """
+    (tmp_path / "src" / "fixtures.py").mkdir(parents=True)
+    code, out, err = _r27(tmp_path, monkeypatch, capsys, {"ok.py": "x = 1\n"})
+    assert code == 0, out + err
+
+
+def test_r28_a_symlink_loop_is_named_not_a_crash(tmp_path, monkeypatch, capsys):
+    """Mutation (the line that runs, in _walk): `target =
+    f.resolve(strict=True)` -> `target = f.resolve()` - a loop resolves to
+    itself on this Python or raises; either way it is no longer named, red.
+    """
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "loop.py").symlink_to("loop.py")
+    code, out, err = _r27(tmp_path, monkeypatch, capsys, {"ok.py": "x = 1\n"})
+    assert code == 2, out + err
+    assert "src/loop.py: is a symlink that does not resolve" in out, out
+
+
+def test_r29_a_symlinked_directory_is_said_not_silent(
+        tmp_path, monkeypatch, capsys):
+    """Mutation (the line that runs, in _walk): `linked_dirs.append(p)` ->
+    `pass` - nothing said, red.
+    """
+    far = tmp_path / "far"
+    far.mkdir()
+    (far / "m.py").write_text(_R27_BAD)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "linked").symlink_to(far)
+    code, out, _ = _r27(tmp_path, monkeypatch, capsys, {"ok.py": "x = 1\n"})
+    assert code == 0, out
+    assert "did not descend 1 symlinked director(ies): src/linked" in out, out
+
+
+def test_r28_a_fifo_named_like_a_module_is_named_not_read(tmp_path):
+    """A FIFO named `pipe.py` is listed among a directory's files, and
+    reading it blocks forever: the guard would hang the job. Run in a
+    subprocess so a regression is a timeout, not a hung suite.
+
+    Mutation (the line that runs, in _walk): `elif not f.is_file():` ->
+    `elif False:` - the read blocks, TimeoutExpired, red.
+    """
+    import os
+    import subprocess
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    os.mkfifo(src / "pipe.py")
+    guard = Path(__file__).resolve().parents[1] / "sutradhar_guards" / "interpolation_lint.py"
+    r = subprocess.run([sys.executable, str(guard), *["src"]], cwd=tmp_path,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "src/pipe.py: is not a regular file" in r.stdout, r.stdout

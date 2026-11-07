@@ -351,6 +351,151 @@ def test_cli_selfcheck_exits_zero():
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+# ── run inside a git hook: the host repository must come out untouched ─────
+#
+# A hook exports GIT_DIR (pre-commit adds GIT_INDEX_FILE, a linked worktree
+# GIT_WORK_TREE), and `git -C <scratch>` does not override them. An adopter's
+# pre-push hook ran a suite that ran `--selfcheck`; the fixture's `git init`
+# landed on the real repository and set `core.bare = true` (2026-10-26).
+
+def _clean_env() -> dict:
+    # Spelled here, not taken from the module under test: a test that borrowed
+    # vg.git_env() would be blinded by the same mutation it exists to catch.
+    import os
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
+def _host_state(git_dir: Path) -> dict:
+    def git(*args: str) -> str:
+        return subprocess.run(["git", f"--git-dir={git_dir}", *args],
+                              capture_output=True, text=True, check=True,
+                              env=_clean_env()).stdout
+    return {
+        "core.bare": git("config", "--get", "core.bare").strip(),
+        "HEAD": git("symbolic-ref", "HEAD").strip(),
+        # Local refs only: the push in the hook test adds origin/* by design.
+        "refs": git("for-each-ref", "--format=%(refname) %(objectname)",
+                    "refs/heads", "refs/tags"),
+        "config": (git_dir / "config").read_bytes(),
+        "index": (git_dir / "index").read_bytes(),
+        "worktrees": git("worktree", "list", "--porcelain"),
+    }
+
+
+@pytest.mark.parametrize("bound", [
+    ("GIT_DIR",),
+    ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"),
+])
+def test_selfcheck_under_a_hook_env_leaves_the_host_repo_untouched(tmp_path, bound):
+    host = tmp_path / "host"
+    host.mkdir()
+    for args in (["init", "-q", "-b", "main"],
+                 ["-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                  "-c", "commit.gpgsign=false", "commit", "-q",
+                  "--allow-empty", "-m", "host"]):
+        subprocess.run(["git", "-C", str(host), *args], check=True,
+                       capture_output=True, env=_clean_env())
+    (host / "tracked.txt").write_text("host\n")
+    subprocess.run(["git", "-C", str(host), "add", "tracked.txt"], check=True,
+                   capture_output=True, env=_clean_env())
+    git_dir = host / ".git"
+    before = _host_state(git_dir)
+    assert before["core.bare"] == "false"  # the premise, or nothing is shown
+
+    values = {"GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(host),
+              "GIT_INDEX_FILE": str(git_dir / "index")}
+    env = _clean_env()
+    env.update({k: values[k] for k in bound})
+    proc = subprocess.run(
+        [sys.executable, "-m", "sutradhar_guards.verify_guard", "--selfcheck"],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        capture_output=True, text=True, env=env, timeout=300,
+    )
+    after = _host_state(git_dir)
+    assert after == before, {k: (before[k], after[k])
+                             for k in before if before[k] != after[k]}
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_selfcheck_in_a_real_pre_push_hook_from_a_linked_worktree(tmp_path):
+    """The incident itself, through the real seam: a push from a linked
+    worktree runs a pre-push hook that runs `--selfcheck`. git exports
+    GIT_DIR=<repo>/.git/worktrees/<name>, and before the fix the fixture's
+    `git init` wrote `core.bare = true` into the shared config and its three
+    commits onto the branch being pushed - and the selfcheck exited 0."""
+    def git(*args: str, cwd: Path = tmp_path) -> None:
+        subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t",
+                        "-c", "user.email=t@example.invalid",
+                        "-c", "commit.gpgsign=false", *args],
+                       check=True, capture_output=True, env=_clean_env())
+
+    host, remote, wt = tmp_path / "host", tmp_path / "remote.git", tmp_path / "wt"
+    git("init", "-q", "--bare", str(remote))
+    git("init", "-q", "-b", "main", str(host))
+    git("commit", "-q", "--allow-empty", "-m", "host", cwd=host)
+    (host / "tracked.txt").write_text("host\n")
+    git("add", "tracked.txt", cwd=host)
+    git("remote", "add", "origin", str(remote), cwd=host)
+    git("worktree", "add", "-q", "-b", "feature", str(wt), cwd=host)
+    hooks, said = tmp_path / "hooks", tmp_path / "hook-exit"
+    hooks.mkdir()
+    (hooks / "pre-push").write_text(
+        "#!/bin/sh\n"
+        f'"{sys.executable}" "{vg.__file__}" --selfcheck >/dev/null 2>&1\n'
+        f'echo $? > "{said}"\n')
+    (hooks / "pre-push").chmod(0o755)
+    before = _host_state(host / ".git")
+
+    git("-c", f"core.hooksPath={hooks}", "push", "-q", "origin", "feature", cwd=wt)
+
+    after = _host_state(host / ".git")
+    assert after == before, {k: (before[k], after[k])
+                             for k in before if before[k] != after[k]}
+    assert said.read_text().strip() == "0", "the selfcheck did not pass in the hook"
+
+
+def test_every_subprocess_in_the_verifier_gets_the_scrubbed_env():
+    """A class ratchet: a new git call (or guard spawn) that forgets
+    `env=git_env()` inherits a hook's GIT_DIR and writes to the wrong
+    repository. Over the AST, so no sibling can be added without it."""
+    import ast
+    source = Path(vg.__file__).read_text(encoding="utf-8")
+
+    def is_git_env(expr) -> bool:
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id == "git_env")
+
+    spawns = 0
+    for fn in ast.walk(ast.parse(source, filename=vg.__file__)):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        # `env = git_env()` then `env=env` (run_guard adds env_extra on top).
+        built = {t.id for n in ast.walk(fn) if isinstance(n, ast.Assign)
+                 and is_git_env(n.value) for t in n.targets
+                 if isinstance(t, ast.Name)}
+        for node in ast.walk(fn):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "subprocess"
+                    and node.func.attr in {"run", "Popen", "call", "check_call",
+                                           "check_output"}):
+                continue
+            spawns += 1
+            env = next((kw.value for kw in node.keywords if kw.arg == "env"), None)
+            ok = is_git_env(env) or (isinstance(env, ast.Name) and env.id in built)
+            assert ok, f"verify_guard.py:{node.lineno} spawns without env=git_env()"
+    assert spawns >= 5, f"found {spawns} spawns; the walk is not seeing the module"
+
+
+def test_git_env_drops_every_variable_git_calls_local():
+    """The list in the module is git's own (`rev-parse --local-env-vars`).
+    A git that adds one fails here rather than in somebody's hook."""
+    proc = subprocess.run(["git", "rev-parse", "--local-env-vars"],
+                          capture_output=True, text=True, check=True,
+                          env=_clean_env())
+    assert set(proc.stdout.split()) <= set(vg._GIT_REPO_ENV)
+
+
 def test_not_a_git_repo_is_inconclusive_not_a_pass(tmp_path):
     proc = subprocess.run(
         [sys.executable, "-m", "sutradhar_guards.verify_guard",

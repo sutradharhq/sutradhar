@@ -1144,6 +1144,33 @@ def test_verify_guard_exit_0_without_its_json_verdict_is_no_verdict(tmp_path, la
     assert res["error"]["code"] == INTERNAL_ERROR, (label, res)
 
 
+@pytest.mark.parametrize("body, says", [
+    ('print("verify_guard - usage")\nraise SystemExit(0)\n',
+     "it printed no JSON object"),
+    ('print("{ \\"verdict\\": VERIFIED")\nraise SystemExit(0)\n',
+     "could not be parsed (JSONDecodeError"),
+], ids=["no-json", "broken-json"])
+def test_no_json_and_broken_json_are_refused_with_different_reasons(
+        tmp_path, body, says):
+    """R24-3 (2.7): `_json_verdict` returned None for both, so a guard that
+    printed broken JSON was reported as having printed none - the refusal
+    was right and its reason was not. Each is now named.
+
+    Mutation (the line that runs): `except ValueError as exc: return None,
+    (...)` -> `return None, "it printed no JSON object"` - the broken-json
+    case reads as no-json, red.
+    """
+    fake = _fake_verify_guard(tmp_path, body)
+    s = Server(cwd=tmp_path, env_extra={"SUTRADHAR_MCP_GUARD_DIR": str(fake)})
+    try:
+        res = s.call_tool("verify_guard", {"guard_cmd": "python3 -c pass"})
+    finally:
+        s.close()
+    assert "result" not in res, res
+    assert res["error"]["code"] == INTERNAL_ERROR, res
+    assert says in res["error"]["message"], res["error"]["message"]
+
+
 def test_verify_guard_json_verdict_is_reported_when_it_agrees(tmp_path):
     """The pair (6.7): the same stand-in printing the JSON verdict its exit
     code means, after a progress line, is a VERIFIED result - or the refusals

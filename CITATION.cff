@@ -7,8 +7,8 @@ authors:
     given-names: Varun
 repository-code: "https://github.com/sutradharhq/sutradhar"
 license: Apache-2.0
-version: 0.5.2
-date-released: "2026-09-13"
+version: 0.6.1
+date-released: "2026-10-03"
 abstract: >-
   An engineering harness for AI coding agents: a doctrine and stdlib-only,
   copy-in guards that keep an agent-built codebase honest. Most rules carry

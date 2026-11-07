@@ -18,21 +18,58 @@ workflow itself. Most rules in it carry the real defect, on a real
 production-bound codebase, that paid for them; the few that do not are
 labelled practice. None of it is aspiration.
 
-## See it catch something first
+## Without the harness, then with it
+
+This repo ships a small app that stands in for what an AI agent hands you at
+the end of a session. Without the harness, you do what everyone does - run
+its tests:
+
+```
+$ python -m pytest tests/
+5 passed, 1 skipped
+```
+
+Green. The agent says it's done. This is the moment you ship.
+
+Now the same code, with the harness. One command:
+
+```
+$ bash examples/run-the-guards.sh
+...
+7 of 7 planted defects caught.
+```
 
 ![Seven real defects surfacing from a green test suite](docs/media/demo.gif)
+
+Ten seconds, no install beyond `pytest` (the demo's one requirement; it
+tells you if it's missing). Here is what was sitting behind that green run,
+in plain words:
+
+1. An outage gets recorded as "this device reported nothing" - and billed
+   that way.
+2. A query that is instant in the demo and takes the database down after a
+   year of real data.
+3. A line of SQL that becomes an injection hole the moment anyone changes
+   the caller.
+4. A customer summary whose numbers the model made up. It reads perfectly.
+5. The one test that checks the billing arithmetic has never actually run.
+   Anywhere. The suite still counts it and reports green.
+6. The design doc promises 200,000 devices inside 800ms. Nothing holds the
+   code to it.
+7. A test that keeps passing after you delete the feature it tests.
+
+Same code both times. The tests weren't lying - they passed. They just
+weren't saying what "green" is usually taken to mean. Reading the code
+doesn't find these either; every one is a planted copy of a defect that
+shipped on a real production codebase and was found the hard way.
 
 ```bash
 git clone https://github.com/sutradharhq/sutradhar.git
 cd sutradhar && bash examples/run-the-guards.sh
 ```
 
-Ten seconds, no install beyond `pytest` (the demo's one requirement; it
-tells you if it's missing). A small app whose test suite is green, and seven
-real defects surfacing out of it: an outage swallowed into an empty dict, a
-model inventing the numbers in a customer summary, a billing test that has
-never run in any environment, a test that cannot fail. Then read on for why
-each one is in there.
+The defect-by-defect walkthrough, with what each one cost the first time,
+is in [examples/README.md](examples/README.md).
 
 ## Put it in your agent's loop
 
@@ -49,6 +86,55 @@ guard's own output when one is red.
 
 Read [SECURITY.md](SECURITY.md) before you install it: it says plainly what
 runs as you, where, and what the parser does and does not stop.
+
+## Use it in CI
+
+One step in any workflow, after your checkout. Nothing to install: the
+guards are stdlib Python and run on the runner's own `python3` (Linux and
+macOS runners).
+
+```yaml
+- uses: actions/checkout@v4
+- uses: sutradharhq/sutradhar@v0.6.1
+  with:
+    paths: src          # where your Python lives; default is the whole repo
+```
+
+It fails the job on a silent exception swallow, a value pasted into a SQL
+string, a failure that returns the same thing as "nothing there", or a CI
+step that can't reach its script or pipes its exit code away. If a guard
+can't run at all - say `paths` holds no Python - the job fails and says so;
+set `on-cannot-run: skip` to turn that into a visible, named skip instead.
+Existing findings? Commit the `swallow_baseline.json` that
+`python3 swallow_lint.py src --update-baseline` writes, and the action holds
+you to that floor rather than to zero. Every input is documented in
+[action.yml](action.yml). Available from the v0.6.1 release.
+
+The action reads your tree as data: every guard runs in Python's isolated
+mode, so nothing in the checkout is imported. It does call `python3` by
+name, so if an earlier step prepends a directory from the checked-out tree
+to `$GITHUB_PATH` (an in-tree `bin/`, `node_modules/.bin`, a virtualenv),
+that tree supplies the interpreter the action runs (R24-30).
+
+## Use it with pre-commit
+
+```yaml
+repos:
+  - repo: https://github.com/sutradharhq/sutradhar
+    rev: v0.6.1
+    hooks:
+      - id: sutradhar-swallow
+      - id: sutradhar-interpolation
+      - id: sutradhar-conflated-degrade
+      - id: sutradhar-ci-step
+```
+
+The same four guards, before the commit instead of after the push. A guard
+that can't run blocks the commit and prints why, rather than letting it
+through quietly. Needs `python3` 3.9 or newer on your PATH; nothing is
+installed. Available from the v0.6.1 release. The hooks run with your own
+environment: a `PYTHONPATH=.` exported in your shell is yours, not the
+hook's, and puts your working tree on the guards' import path (R24-30).
 
 ## Framework, not a product
 
@@ -182,8 +268,10 @@ sutradhar/
 │   │   ├── framework_only.py      Keeps this repo a framework: stdlib-only, zero deps
 │   │   ├── framework_shape.py     ...and keeps it speaking its own vocabulary, not an adopter's
 │   │   ├── ownership_lint.py      Refuses a stage that touches a path another agent owns (7.3)
-│   │   └── mcp_server.py          Optional MCP stdio server: the guards as agent-callable tools
+│   │   ├── mcp_server.py          Optional MCP stdio server: the guards as agent-callable tools
+│   │   └── corpus.py              Scorer for the defect corpus: twin verdicts, coverage floor, cross-corpus sweep
 │   └── tests/                     The guards' own tests, red cases and selfcheck wiring included
+├── corpus/                    Defective/clean twin manifests, the coverage floor, and improvement-round.md: the Monday loop
 ├── js/
 │   ├── cypress/
 │   │   ├── uiGuards.ts            Behavioral UI invariants: effect assertions, overprint detection

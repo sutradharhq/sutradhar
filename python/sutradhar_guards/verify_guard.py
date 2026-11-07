@@ -236,10 +236,39 @@ class GitError(RuntimeError):
     pass
 
 
+#: The variables through which an enclosing git process points every child
+#: git at ITS repository - the list `git rev-parse --local-env-vars` prints.
+#: A hook runs with GIT_DIR exported (pre-commit adds GIT_INDEX_FILE), and
+#: `git -C <dir>` does not override any of them: a `git init` in a scratch
+#: directory re-initialises the repository the hook belongs to.
+_GIT_REPO_ENV = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+)
+
+
+def git_env() -> dict:
+    """This process's environment without the variables that bind git to a
+    repository, so every git this tool starts finds its repository from the
+    directory it is pointed at.
+
+    Every subprocess this module starts takes its env from here - the git
+    calls on the source repo, on the throwaway worktree and on the selfcheck
+    fixture, and the guard command, which runs inside the worktree and may
+    run git itself. *Scar: an adopter's pre-push hook ran a test suite that
+    ran `--selfcheck`; the fixture's `git init` inherited the hook's GIT_DIR
+    and set `core.bare = true` on the real repository (2026-10-26). An
+    instrument must not damage what it measures.*"""
+    return {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+
+
 def _git(repo: Path, *args: str, check: bool = True) -> str:
     proc = subprocess.run(
         ["git", "-C", str(repo), *args],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=git_env(),
     )
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed ({proc.returncode}): {proc.stderr.strip()}")
@@ -259,7 +288,7 @@ def parents_of(repo: Path, commit: str) -> list[str]:
 def exists_at(repo: Path, rev: str, path: str) -> bool:
     proc = subprocess.run(
         ["git", "-C", str(repo), "cat-file", "-e", f"{rev}:{path}"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=git_env(),
     )
     return proc.returncode == 0
 
@@ -412,7 +441,7 @@ def run_guard(cwd: Path, cmd: str, timeout: int, env_extra: dict | None = None) 
     decide pass/fail, and we never let a wrapper swallow `$?`."""
     argv, subdir = parse_guard_cmd(cmd)
     workdir = resolve_guard_cwd(cwd, subdir)
-    env = dict(os.environ)
+    env = git_env()
     env.update(env_extra or {})
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     try:
@@ -811,7 +840,7 @@ def verify(
         else:
             subprocess.run(
                 ["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)],
-                capture_output=True, text=True,
+                capture_output=True, text=True, env=git_env(),
             )
             shutil.rmtree(scratch, ignore_errors=True)
 
@@ -887,7 +916,7 @@ def _fixture_repo() -> Path:
              "-c", "user.email=selfcheck@sutradhar.invalid",
              "-c", "commit.gpgsign=false",
              *args],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, env=git_env(),
         )
 
     git("init", "-q")

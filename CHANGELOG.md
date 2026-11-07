@@ -8,6 +8,328 @@ upgrade by diffing against the tag they took, and `bash bootstrap.sh --check
 
 ## Unreleased
 
+**The verifier no longer writes to the repository of the hook that runs it**
+(doctrine 2.2, 2.3; an adopter's pre-push hook, 2026-10-26).
+
+- `verify_guard --selfcheck`, run by a test suite from a pre-push hook in a
+  linked worktree, inherited the hook's `GIT_DIR`. `git -C <scratch>` does not
+  override it, so the fixture's `git init` set `core.bare = true` on the real
+  repository and its three commits landed on the branch being pushed, and the
+  selfcheck exited 0. Every subprocess `verify_guard` starts (git on the source
+  repo, the throwaway worktree and the fixture, and the guard command) now runs
+  with `git_env()`: this environment minus the variables `git rev-parse
+  --local-env-vars` lists. The corpus's verify adapter builds its fixture the
+  same way.
+- Guards: the selfcheck under `GIT_DIR` alone and under `GIT_DIR` +
+  `GIT_WORK_TREE` + `GIT_INDEX_FILE`, a real pre-push hook from a linked
+  worktree, an AST ratchet that every spawn in the verifier takes
+  `git_env()`, and a check that the list covers git's own. Reverting the fix
+  turns all of them red.
+
+**A pull request can no longer bank the defect it adds** (backflow B-64,
+doctrine 2.1; after Perplexity SPACE's architecture check, Apache-2.0).
+
+- `swallow_lint` and `conflated_degrade_lint` take `--base-baseline FILE`,
+  the base branch's copy of the baseline. An entry the current baseline adds,
+  or a count it raises, against that copy is a finding (exit 1). Lowered and
+  removed entries are silent. A base copy that is not a baseline is exit 2,
+  never an empty floor. `--base-baseline` with `--update-baseline` is
+  refused. Each selfcheck carries the pair.
+- The Action compares both baselines with the base branch's copies on every
+  pull request (new input `baseline-vs-base`, default `check`). It reads the
+  copy with `git cat-file` from the event's base commit, fetching it at depth
+  1 when the checkout lacks it. A base branch with no baseline counts as an
+  empty floor. A base commit it cannot get is a named could-not-run row. On
+  other events the step summary says nothing was compared. git is the only
+  program the driver starts besides an isolated python, and the R24-22
+  isolation ratchet now admits exactly `_python()` and `_git()`.
+- **Migration: the pull request that first adds a baseline goes red**,
+  because every entry in it is new against the base. Merge that one with
+  `baseline-vs-base: off`, or land the baseline before turning the Action on.
+  A tag pinned at v0.6.1 is unchanged.
+
+**A skipped test cannot read as green on CI** (backflow B-66, doctrine 2.9;
+after SPACE's fail-closed test dependencies).
+
+- `test_examples.py` skipped the whole demo when bash or the examples tree
+  was missing, and the suite read green. With `CI` set it now fails
+  collection and says why. Off CI it still skips, naming the reason.
+- `python/tests/test_skips_fail_closed_on_ci.py` is the class ratchet: any
+  test module that can skip must also read `CI` and fail there.
+
+**`detectors` finds helpers whose only caller is a test** (round 25,
+R25-1, doctrine 8.2).
+
+- `find_test_only_helpers(package_root)` flags a module-level `_name`
+  function that a test file references and no production file does. A test
+  is not a caller. Public names, decorated functions, names in `__all__`
+  and helpers nothing references are left alone. A production file that
+  does not parse makes it refuse, with its own violation, instead of
+  flagging. Corpus case `helper-with-test-and-no-caller`; declared count 57.
+
+**Every file a guard parses is read as `utf-8-sig`, and a class ratchet
+keeps it that way** (round 25, R25-2, R25-3, doctrine 2.9).
+
+- R24-27 fixed three lints and missed two siblings. `detectors` read
+  source as `utf-8`, so a BOM-prefixed file that Python imports was
+  reported `does not parse`. `framework_only` reported a BOM-prefixed
+  guard as `could not parse`. Both now read `utf-8-sig`. `detectors` also
+  drops a leading U+FEFF from source a caller decoded as `utf-8`, and
+  catches the parse failures the lints name as not judged (a NUL byte is a
+  `ValueError` on 3.9), so it reports instead of crashing.
+- `python/tests/test_parse_encoding_ratchet.py` walks every guard module
+  by AST. It follows each argument of `ast.parse`, across helper functions
+  and modules, back to where the text was read, and fails on any encoding
+  but `utf-8-sig`. It names all three R24-27 sites in the pre-fix tree.
+- **Migration: `find_order_by_without_limit` returns one
+  `<path>::does not parse` violation for source that does not parse,
+  where it returned `[]`.** A ratchet over such a file goes red with that
+  key. Fix the file, or bank the key; it is position-free.
+  `find_unresolved_relative_imports` and `find_test_only_helpers` keep
+  their keys, and their messages now say why the file was not judged.
+
+**CI sweeps every guard over every clean twin** (round 25, R25-4,
+doctrine 6.10).
+
+- `corpus.py --sweep-all` runs `--sweep` for every guard in the registry:
+  2 if any guard measured nothing, else 1 if any flagged a clean twin,
+  else 0. The selftest job runs it. Per-case scoring never shows a guard
+  another case's clean twin, and that blind spot is how R25-2 got through
+  a release. About 35 s on an M2 laptop for 15 guards over 57 cases.
+
+## v0.6.1 - 2026-10-03
+
+**The Action's description fits the GitHub Marketplace.**
+
+- The Marketplace refuses an `action.yml` description of 125 characters or
+  more, and v0.6.0's was 206, so v0.6.0 could not be listed. The description
+  is now 122 characters and names the same four default checks. Nothing a
+  guard does changed; v0.6.0 stays tagged exactly as it was.
+- `test_the_marketplace_description_fits_its_limit` fails if the
+  description reaches 125 again: the limit is GitHub's, so nothing here
+  encoded it, and four review passes read past it.
+
+## v0.6.0 - 2026-10-02
+
+**Adoptable in one line: a GitHub Action and pre-commit hooks**
+(distribution; usable from v0.6.0).
+
+- `action.yml`: `uses: sutradharhq/sutradhar@v0.6.0`. A composite action
+  that runs `action/run_guards.py` from its own checkout on the runner's
+  `python3` - no Docker, no npm, no install step. Default guards are the
+  four that need no configuration: `swallow`, `interpolation`,
+  `conflated-degrade` over `paths`, and `ci-step` over `workflows`.
+  `budget` and `rounds` are opt-in by name; `framework_only` and
+  `framework_shape` are refused by name, since in an adopter's tree they
+  can only pass (R20-4). Baselines and the allowlist are inputs, and one
+  that is named must exist.
+- Every input reaches the step through `env:`; no `run:` body holds a
+  `${{ }}` expression (2.8 in YAML), and every guard is started as an
+  argument list, never through a shell. A path input carrying a shell
+  metacharacter or a leading `-` is refused with exit 2 before anything
+  runs: `--update-baseline` as a path would have rewritten the adopter's
+  floor.
+- Exit 2 is never a silent pass (2.9). `on-cannot-run` defaults to `fail`,
+  because a green job over a guard that read nothing is the R21-2 lie one
+  level up; `skip` makes each one a named skip (the guard's own sentence,
+  a warning annotation, a step-summary row), and a run where every guard
+  was skipped fails anyway. A guard that raises, or that exits anything but
+  0/1/2, is reported as crashed - the instrument's failure, not a finding
+  (6.8, 6.11); see R24-1 below for how that is decided. Guard output is fenced with
+  `::stop-commands::`, so a line of the adopter's source quoted in a
+  finding cannot speak to the runner.
+- `.pre-commit-hooks.yaml`: `sutradhar-swallow`, `sutradhar-interpolation`,
+  `sutradhar-conflated-degrade`, `sutradhar-ci-step`. `language: script`,
+  because a `python` hook makes pre-commit pip-install the repository and
+  that needs the dependency manifest this framework refuses to ship. The
+  four guard files are now committed executable (mode 100755) for that
+  reason. `conflated-degrade` scans the whole tree rather than the staged
+  files: its ratchet reads a banked entry it did not see as fixed and
+  exits 1.
+- Proof, in pairs: the selftest `action` job runs the action from this
+  checkout over `examples/broken-app` (must fail) and a clean twin under
+  `python/tests/fixtures/action-clean` (must pass), a tree with no Python
+  under `fail` (must fail) and `skip` (must pass), and an injection-shaped
+  path (must be refused, and its command must not have run).
+  `python/tests/test_distribution.py` pins the rest offline.
+
+**The pull request under test cannot write the Action's verdict, its
+summary, or code the Action runs** (round 24, R24-1, R24-22, doctrine 6.8).
+
+- A guard was called crashed whenever the traceback header appeared in its
+  output, and that output quotes the pull request - an f-string expression,
+  a filename. A file named after the header turned a finding into "crashed
+  - the guard failed, not your code", and the step summary carried a live
+  image and link. The verdict is now the exit code alone: `classify()` no
+  longer takes the output. Each guard runs under a launcher
+  `action/run_guards.py` owns, which turns an exception escaping the guard
+  into exit 70, a code no guard returns.
+- Every interpreter the Action starts is isolated (`-I`): the driver itself
+  in `action.yml`, and each guard through the one constructor that builds
+  an argv in `run_guards.py`. The first launcher used `python3 -c`, which
+  puts the cwd - the pull request's checkout - first on `sys.path`, so a
+  `traceback.py` at the pull request's root ran in the adopter's job
+  (R24-22, introduced by the R24-1 fix and caught before the tag). A class
+  test walks every interpreter the driver spells and starts and refuses one
+  without `-I`.
+- A guard file that cannot be read is crashed, not "could not run": it
+  exited 2 before, and `on-cannot-run: skip` passed it.
+- Adopter-derived text in the step summary is escaped inert (`md_inert`):
+  `&`, `<`, `>` as character references, every other ASCII punctuation
+  character backslash-escaped, line breaks flattened. No tag, link, image,
+  emphasis, autolink or table break survives in CommonMark or GFM; GitHub's
+  own mention and issue linking after render is not covered (R24-25).
+
+**A file the source lints cannot parse is named, never counted as clean**
+(round 24, R24-27 to R24-29, doctrine 2.9).
+
+- A UTF-8 byte-order mark at the top of a file made `swallow_lint`,
+  `interpolation_lint` and `conflated_degrade_lint` read it as clean: read
+  as `utf-8`, the mark reached the parser, the parse failed, and the
+  wrapper returned the empty list a clean file returns. So did a NUL byte,
+  and syntax newer than the running Python (a `match` on 3.9). This
+  predates v0.6.0. Source is now read as `utf-8-sig`; a file that still
+  cannot be read or parsed is printed under `NOT JUDGED` with the reason.
+- Exit: 1 on any finding (unjudged files still printed), else 2 if any
+  file was not judged, else 0. A finding outranks an unjudged file, so an
+  unparsable neighbour cannot lower it to a skippable 2. `--update-baseline`
+  over a walk with an unjudged file is refused.
+- Library: `check_source` and `find_conflated_degrades` raise `NotJudged`
+  on source that does not parse, instead of returning `[]`.
+- **Migration: a tree holding a file that does not parse under the
+  guard's Python used to exit 0 and now exits 2, naming the file.** This
+  can turn a CI step red, and that step was not checking that file. Fix
+  the file, take it out of `paths`, or run the guard under a Python that
+  parses it.
+- Legal trees no longer crash or hang the instrument (R24-28): a directory
+  named like `fixtures.py` is a directory, and a symlink loop, a dangling
+  link, or a FIFO named `.py` is listed as not judged. Symlinked directories are still not
+  descended, and are now said (R24-29).
+- New corpus case `swallow-behind-a-byte-order-mark`, whose fences carry
+  the mark; the declared count moves to 56, and 2.9 leaves
+  `corpus/uncovered.json` (14 rules covered, 24 banked).
+
+**A symlink in the pull request cannot turn a finding into a skip**
+(round 24, R24-23, doctrine 2.9).
+
+- A file symlink to a conflated file gave `conflated_degrade_lint` the same
+  key twice, an exit 2 instrument error, and under `on-cannot-run: skip` an
+  Action run that passed. `swallow_lint`, `interpolation_lint` and
+  `conflated_degrade_lint` now read a file reached twice - through a link
+  and its target, or overlapping paths - once. A symlinked file whose
+  target is outside every scanned directory is skipped and counted on a
+  printed line, not followed. Interpolation findings reached through a
+  link are no longer reported twice. Same paths, same verdicts otherwise.
+
+**"Deleting a corpus case fails the run" is now true** (round 24, R24-2,
+doctrine 3.7).
+
+- It was claimed in `corpus/README.md` and by a test name, and a deleted case
+  printed "51 of 51" and exited 0 - R22-1 one level down. `corpus/case_count.json`
+  declares the total; a full run exits 1 unless exactly that many cases load,
+  naming the shortfall or the excess. Symmetric and never rewritten by a
+  tool, the dialect of `uncovered.json`. A malformed declaration exits 2.
+- `--require-case-count` makes a missing declaration exit 2; the CI corpus
+  step passes it. The test is renamed
+  `test_deleting_a_case_file_fails_against_the_declared_count` and asserts
+  the failure, with the pair. `corpus.py`'s selfcheck carries both pairs.
+
+**The framework passes its own Action** (round 24, R24-3 to R24-6, R24-8;
+doctrine 6.1, 2.7).
+
+- Run with its defaults on this repository, the Action was red on swallow
+  and conflated-degrade. Each finding was read. `mcp_server._json_verdict`
+  conflated "printed no JSON" with "printed JSON that would not parse" and
+  now returns the reason with the None (R24-3). The selfcheck wrappers that
+  print `SELFCHECK FAILED` and return False (R24-8), `handle_line`'s
+  notification branch (R24-5) and `detectors._module_exports` (R24-6) are
+  explicit degradations, banked with reasons in `.github/sutradhar/` - no
+  lint rule changed for any adopter.
+- New step in the selftest `action` job: `uses: ./` over `action plugin
+  python` with those baselines, which must pass. `examples/` is broken on
+  purpose and not scanned. `test_distribution.py` reads that step's inputs
+  from the workflow and runs them offline as a pair.
+
+**The pipe check reads a case pattern and a `[[ ]]` test as shell, not as
+pipes** (round 24, R24-7, doctrine 6.3).
+
+- `case "$X" in a|b) ...;;` and `[[ "$REF" =~ ^(main|release/.*)$ ]]` were
+  flagged as pipes that swallow an exit code. A `|` inside `[[ ... ]]` and
+  a case pattern list's alternation bars are no longer read as pipes; the
+  case state crosses the lines of a step. `|&`, a pipe after pipefail is
+  switched off, a pipe in a case clause's command, and a pipe after `]]`
+  are all still flagged. Pairs in the tests and the selfcheck; new corpus
+  case `ci-pipe-case-pattern-and-regex` (the declared count moves to 55).
+
+**`CITATION.cff`** carries v0.6.0's release date, 2026-10-02; it had
+v0.5.2's.
+
+**`ci_step_lint.py` refuses a pipe that swallows an exit code** (round 23,
+R22-3 closed, doctrine 6.3).
+
+- A `run:` step that pipes a command into another (`pytest | tail -5`)
+  with no `set -o pipefail` before it now exits 1. GitHub runs a step with
+  no `shell:` key as `bash -e {0}`, which has no pipefail, so the step
+  reports the last command's status and a failed build reads as success.
+  Accepted: pipefail set earlier in the step, or an effective shell (step,
+  job defaults, workflow defaults, in any key order) of plain `bash`, which
+  GitHub runs with `-o pipefail`. Not read as pipes: `||`, a `|` inside
+  quotes, `${{ }}` or a comment, an `echo`/`printf` upstream, and any step
+  whose shell is not a command shell. The embedded selfcheck carries the
+  new pair: a piped build must be flagged and the same pipe under pipefail
+  must not.
+- Only POSIX shells (bash, sh, zsh) are read for pipes (R23-10). pwsh,
+  powershell and cmd were read too, and a step with no `shell:` on a
+  windows runner was read as bash, so an ordinary pwsh pipeline was
+  flagged with a `set -o pipefail` remedy that breaks pwsh. A job whose
+  `runs-on` names windows is now read as pwsh by default and skipped. New
+  corpus case `ci-pipe-windows-default-shell` pins the pair: the linux job
+  is caught, and the windows job is a clean twin every sweep runs.
+- `corpus.py --sweep` counts what it measured (R23-3). Every sweep prints
+  measured-silent, not-applicable, flagged and invalid counts, and `--json`
+  carries them; a sweep that measured zero twins exits 2 instead of 0.
+  Not-applicable twins (exit 2 or 3 from a guard that has nothing to read
+  there) stay a real answer, not a failure. The selfcheck carries the pair.
+- The corpus case `ci-pipe-swallows-exit-code` is flipped from open to
+  caught with its twins unchanged, and 6.3 leaves `corpus/uncovered.json`:
+  13 rules covered, 25 banked.
+
+**The defect corpus scores what the guards claim** (round 22, R22-1, R22-2).
+
+- New `python/sutradhar_guards/corpus.py`: 53 defective/clean twin manifests
+  in `corpus/cases/`, scored through the real guard invocations - 50 of 50
+  caught-cases CAUGHT, 3 open, 0 invalid, with the denominator taken from
+  the manifest set on disk. Four verdicts, not three: a guard that flags the
+  clean twin is a FALSE_POSITIVE, a finding of its own kind, never folded
+  into "could not measure". A manifest names a guard, never a command; a
+  fixed registry owns all 15 invocation shapes.
+- A per-rule coverage floor: of 49 doctrine rules, 12 covered, 11 excluded
+  with a reason each (drills, restores, anything needing a running system
+  or a human), 26 uncovered and banked in `corpus/uncovered.json`. A rule
+  that is uncovered with no sentence fails, and so does a banked rule that
+  gained a case. The banked list is the improvement loop's work queue.
+- The demo declares its total (R22-1). `run-the-guards.sh` used to count
+  the blocks that ran, so deleting one printed "6 of 6" and exited 0. It now
+  refuses a run whose count differs from `EXPECTED=7`.
+- New `corpus/improvement-round.md`: the Monday round reads the stop
+  rule first, refuses to start while a previous round's branch is
+  unreviewed, authors the case before the guard, and accepts only on the
+  four-command gate's `0 / 0 / 0 / 0`. Selection composed, not built;
+  merges stay human. It runs in this repository only for now.
+- **`corpus.py` and the skill do not ship to adopters yet** (R22-8). A
+  scorer with no cases can only ever refuse, so neither joins the bootstrap
+  copy set or the plugin until the skill can teach an adopter to write
+  cases; they join together.
+
+**The front page shows without-then-with, in plain words.**
+
+- The README's demo section now runs the contrast explicitly: the app's own
+  suite green (`5 passed, 1 skipped`), then the harness (`7 of 7 planted
+  defects caught`), then the seven defects described without any doctrine
+  vocabulary. `examples/README.md` gains a plain-words table above the
+  walkthrough. Both quoted outputs were run and witnessed before being
+  written down; that change left the demo script itself untouched.
+
 **The plugin's two skills work in an installed plugin** (round 21, R21-17).
 
 - `robustness-loop` and `ops-drill` told Claude to read
